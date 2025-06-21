@@ -16,9 +16,11 @@ export default function LandingPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [username, setUsername] = useState("")
+  const [mounted, setMounted] = useState(false)
 
   // Check if user is already authenticated
   useEffect(() => {
+    setMounted(true)
     const user = localStorage.getItem("currentUser")
     if (user) {
       setIsAuthenticated(true)
@@ -45,7 +47,9 @@ export default function LandingPage() {
     const currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}")
 
     if (!currentUser.hasCompletedPreferences) {
-      window.location.href = "/preferences"
+      if (mounted) {
+        window.location.href = "/preferences"
+      }
       return null
     }
 
@@ -98,6 +102,18 @@ export default function LandingPage() {
               </Link>
             </div>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show loading state until mounted to prevent hydration issues
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-5xl font-bold text-gray-900 mb-4">QuestMap</h1>
+          <p className="text-xl text-gray-600">Loading...</p>
         </div>
       </div>
     )
