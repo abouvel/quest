@@ -1,34 +1,31 @@
 import dotenv from "dotenv";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { validateQuestLocation } from "./lib/mapsApi.js";
-import { globalQuestStore } from "./lib/globalQuestStore.ts";
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-export async function generateQuest(user, completedTitles = []) {
+export async function generateQuest(user, questTitles = []) {
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-  // Get completed quest titles from global store if available
-  let questTitles = completedTitles;
-
+  // Write debug information to a log file
   try {
-    // Try to get quests from global store first
-    const allQuests = await globalQuestStore.getAllQuests(user.id);
-    const completedQuests = globalQuestStore.getCompletedQuests();
-    const incompleteQuests = globalQuestStore.getIncompleteQuests();
-
-    // Combine both completed and incomplete quest titles
-    const completedTitles = completedQuests.map(quest => quest.title);
-    const incompleteTitles = incompleteQuests.map(quest => quest.title);
-    questTitles = [...completedTitles, ...incompleteTitles];
-    console.log("-------------questTitles", questTitles);
-
-    console.log('Using quest titles from global store - Completed:', completedTitles.length, 'Incomplete:', incompleteTitles.length);
-  } catch (error) {
-    console.log('Global store not available, using provided completedTitles:', completedTitles.length);
-    questTitles = completedTitles;
+    const logFilePath = path.join(process.cwd(), 'ai-debug.log');
+    const timestamp = new Date().toISOString();
+    const logHeader = `\n--- AI DEBUG LOG: ${timestamp} ---`;
+    const logContent = `
+User Location: ${user.location}
+User Interests: ${JSON.stringify(user.interests)}
+Excluded Titles (${questTitles.length}):
+${questTitles.map(t => `- ${t}`).join('\n')}
+`;
+    fs.appendFileSync(logFilePath, `${logHeader}\n${logContent}`);
+    console.log(`AI debug info logged to ${logFilePath}`);
+  } catch (logError) {
+    console.error('Failed to write AI debug log:', logError);
   }
 
   const prompt = `
