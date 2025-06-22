@@ -22,6 +22,13 @@ interface DailyQuest {
   estimatedTime: string
   points: number
   completed: boolean
+  debug?: {
+    userLocation: string
+    userInterests: string[]
+    userPreference: string
+    completedTitles: string[]
+    prompt: string
+  }
 }
 
 interface QuestCompletion {
@@ -43,117 +50,81 @@ export default function QuestPage() {
   const [todayQuest, setTodayQuest] = useState<DailyQuest | null>(null)
   const [countdown, setCountdown] = useState("")
   const [isCompleting, setIsCompleting] = useState(false)
-  const [showCompletionForm, setShowCompletionForm] = useState(false)
-  const [dailyCompleted, setDailyCompleted] = useState(false)
-  const [completionData, setCompletionData] = useState<QuestCompletion>({
-    lat: null,
-    lng: null,
-    liked: true,
-    feedback_tags: [],
-    feedback_text: ""
-  })
-  const [newFeedbackTag, setNewFeedbackTag] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [showDebug, setShowDebug] = useState(false)
 
   useEffect(() => {
-    // Redirect to landing page if not authenticated
-    if (!authLoading && !isAuthenticated) {
-      window.location.href = "/"
-      return
-    }
+    fetchQuest()
+    setupCountdown()
+  }, [])
 
-    if (isAuthenticated && user) {
-      generateQuest()
-      checkDailyCompletion()
-    }
-  }, [isAuthenticated, authLoading, user])
-
-  const checkDailyCompletion = async () => {
-    if (!user) return
-    
+  const fetchQuest = async () => {
     try {
-      const { data: userData } = await userUtils.getUser(user.id)
-      const today = new Date().toISOString().split('T')[0]
-      const lastCompletedDate = userData?.daily_completed_date
+      setIsLoading(true)
+      console.log('Fetching quest...')
       
-      // Check if user completed a quest today
-      setDailyCompleted(lastCompletedDate === today)
-    } catch (error) {
-      console.error('Error checking daily completion:', error)
-      setDailyCompleted(false)
-    }
-  }
+      // For now, use a hardcoded user ID - you can get this from auth later
+      const userId = '99ba348a-eee4-4d23-9982-fa943c9d0826' // Replace with actual user ID
+      console.log('Using userId:', userId)
+      
+      const response = await fetch('/api/generate-quest', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId }),
+      })
 
-  const generateQuest = async () => {
-    try {
-      // Get user preferences from Supabase
-      const { data: userData } = await userUtils.getUser(user!.id)
-      const userPreferences = userData?.preference_tags || {}
+      console.log('Response status:', response.status)
+      console.log('Response ok:', response.ok)
 
-      // Mock quest generation based on user preferences and location
-      const interests = userPreferences.interests || []
-      const activityTypes = userPreferences.activityTypes || []
-      const location = userPreferences.location || "your area"
-
-      // Simple quest generation based on preferences
-      let questTitle = "Discover a Local Art Gallery"
-      let questDescription =
-        "Visit a local art gallery or museum you've never been to before. Take time to appreciate at least 3 different pieces and learn about one local artist."
-      let category = "Culture"
-
-      if (interests.includes("food")) {
-        questTitle = "Hidden Culinary Gem"
-        questDescription = `Find a highly-rated local restaurant in ${location} that you've never tried before. Order something you've never had and chat with the staff about their recommendations.`
-        category = "Food & Dining"
-      } else if (interests.includes("nature")) {
-        questTitle = "Nature Trail Discovery"
-        questDescription = `Explore a hiking trail or park within ${userPreferences.explorationRadius || 5} miles of ${location}. Take photos of 3 different types of plants or wildlife you encounter.`
-        category = "Nature"
-      } else if (interests.includes("photography")) {
-        questTitle = "Street Photography Challenge"
-        questDescription = `Capture the essence of ${location} through street photography. Take 10 photos that tell a story about your local community.`
-        category = "Photography"
+      if (!response.ok) {
+        throw new Error('Failed to fetch quest')
       }
 
-      const quest = {
+      const data = await response.json()
+      console.log('Response data:', data)
+      
+      // Transform the API response to match your interface
+      const quest: DailyQuest = {
         id: "1",
-        title: questTitle,
-        description: questDescription,
-        location: `Near ${location}`,
-        category: category,
-        difficulty: (
-          userPreferences.difficultyPreference > 70
-            ? "Hard"
-            : userPreferences.difficultyPreference > 40
-              ? "Medium"
-              : "Easy"
-        ) as "Easy" | "Medium" | "Hard",
+        title: data.quest.title,
+        description: data.quest.description,
+        location: "Your area",
+        category: "Adventure",
+        difficulty: "Medium",
         estimatedTime: "1-2 hours",
-        points: userPreferences.difficultyPreference > 70 ? 200 : userPreferences.difficultyPreference > 40 ? 150 : 100,
+        points: 150,
         completed: false,
+        debug: data.quest.debug
       }
 
+      console.log('Transformed quest:', quest)
       setTodayQuest(quest)
     } catch (error) {
-      console.error('Error generating quest:', error)
-      // Fallback quest
-      setTodayQuest({
-        id: "1",
-        title: "Discover a Local Art Gallery",
-        description: "Visit a local art gallery or museum you've never been to before. Take time to appreciate at least 3 different pieces and learn about one local artist.",
-        location: "Your area",
-        category: "Culture",
-        difficulty: "Easy",
-        estimatedTime: "1-2 hours",
-        points: 100,
-        completed: false,
-      })
+      console.error('Error fetching quest:', error)
+      // Fallback to mock quest if API fails
+      setTodayQuest(generateMockQuest())
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  useEffect(() => {
-    if (!todayQuest) return
+  const generateMockQuest = (): DailyQuest => {
+    return {
+      id: "1",
+      title: "Discover a Local Art Gallery",
+      description: "Visit a local art gallery or museum you've never been to before. Take time to appreciate at least 3 different pieces and learn about one local artist.",
+      location: "Your area",
+      category: "Culture",
+      difficulty: "Easy",
+      estimatedTime: "1-2 hours",
+      points: 100,
+      completed: false,
+    }
+  }
 
-    // Countdown timer to next quest (midnight)
+  const setupCountdown = () => {
     const updateCountdown = () => {
       const now = new Date()
       const tomorrow = new Date(now)
@@ -173,10 +144,7 @@ export default function QuestPage() {
     updateCountdown()
     const interval = setInterval(updateCountdown, 1000)
     return () => clearInterval(interval)
-  }, [todayQuest])
-
-  const handleCompleteQuest = async () => {
-    if (!user || !todayQuest) return
+  }
 
     setIsCompleting(true)
     try {
@@ -273,23 +241,15 @@ export default function QuestPage() {
     }
   }
 
-  if (authLoading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Redirecting to login...</p>
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Generating your personalized quest...</p>
+          </div>
         </div>
       </div>
     )
@@ -301,8 +261,8 @@ export default function QuestPage() {
         <Navigation />
         <div className="container mx-auto px-4 py-8">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Generating your personalized quest...</p>
+            <p className="text-gray-600">Failed to load quest</p>
+            <Button onClick={fetchQuest} className="mt-4">Retry</Button>
           </div>
         </div>
       </div>
@@ -331,16 +291,51 @@ export default function QuestPage() {
                   <CardTitle className="text-2xl mb-2">Today's Quest</CardTitle>
                   <CardDescription>Your personalized daily adventure</CardDescription>
                 </div>
-                {dailyCompleted && (
-                  <Badge className="bg-green-100 text-green-800">
-                    <CheckCircle className="w-4 h-4 mr-1" />
-                    Daily Quest Completed
-                  </Badge>
-                )}
+                <div className="flex items-center space-x-2">
+                  {todayQuest.debug && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowDebug(!showDebug)}
+                      className="flex items-center space-x-1"
+                    >
+                      <Bug className="w-4 h-4" />
+                      <span>Debug</span>
+                    </Button>
+                  )}
+                  {todayQuest.completed && (
+                    <Badge className="bg-green-100 text-green-800">
+                      <CheckCircle className="w-4 h-4 mr-1" />
+                      Completed
+                    </Badge>
+                  )}
+                </div>
               </div>
             </CardHeader>
 
             <CardContent className="space-y-6">
+              {/* Debug Information */}
+              {showDebug && todayQuest.debug && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-yellow-800 mb-2 flex items-center">
+                    <Bug className="w-4 h-4 mr-1" />
+                    Debug Information
+                  </h4>
+                  <div className="text-sm text-yellow-700 space-y-1">
+                    <div><b>User Location:</b> {todayQuest.debug.userLocation}</div>
+                    <div><b>User Interests:</b> {todayQuest.debug.userInterests?.join(", ")}</div>
+                    <div><b>User Preference:</b> {todayQuest.debug.userPreference}</div>
+                    <div><b>Completed Titles:</b> {todayQuest.debug.completedTitles?.join(", ") || "None"}</div>
+                    <div className="mt-2">
+                      <b>Prompt:</b>
+                      <pre className="whitespace-pre-wrap text-xs mt-1 bg-yellow-100 p-2 rounded">
+                        {todayQuest.debug.prompt}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <h3 className="text-xl font-semibold mb-3">{todayQuest.title}</h3>
                 <p className="text-gray-700 mb-4">{todayQuest.description}</p>
