@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { MapPin, Users, Clock, Calendar, RefreshCw, Globe } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { MapPin, Users, Clock, Calendar, RefreshCw, Globe, X } from "lucide-react"
 import Navigation from "@/components/navigation"
 import { createClient } from '@supabase/supabase-js'
 
@@ -18,6 +19,10 @@ interface QuestLocation {
   category: string
   username: string
   userId: string
+  imagePath?: string
+  imageUrl?: string
+  feedbackText?: string
+  feedbackTags?: string[]
 }
 
 // Create Supabase client
@@ -39,6 +44,8 @@ let scriptLoadingPromise: Promise<any> | null = null
 export default function MapPage() {
   const [quests, setQuests] = useState<QuestLocation[]>([])
   const [selectedQuest, setSelectedQuest] = useState<QuestLocation | null>(null)
+  const [showQuestDialog, setShowQuestDialog] = useState(false)
+  const [selectedQuestImageUrl, setSelectedQuestImageUrl] = useState<string | null>(null)
   const [filter, setFilter] = useState<"all" | "friends">("all")
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -175,7 +182,7 @@ export default function MapPage() {
 
         // Add click listener
         marker.addListener('click', () => {
-          setSelectedQuest(quest)
+          handleQuestSelect(quest)
         })
 
         markersRef.current.push(marker)
@@ -214,7 +221,11 @@ export default function MapPage() {
           tags,
           user_id,
           status,
-          users!quests_user_id_fkey(username)
+          users!quests_user_id_fkey(username),
+          image_path,
+          image_url,
+          feedback_text,
+          feedback_tags
         `)
         .eq('status', 'completed')
         .not('lat', 'is', null)
@@ -238,7 +249,11 @@ export default function MapPage() {
         completedAt: quest.completed_at,
         category: quest.tags?.[0] || 'General',
         username: quest.users?.username || 'Unknown',
-        userId: quest.user_id
+        userId: quest.user_id,
+        imagePath: quest.image_path,
+        imageUrl: quest.image_url,
+        feedbackText: quest.feedback_text,
+        feedbackTags: quest.feedback_tags
       }))
 
       console.log('🗺️ Transformed quests:', transformedData)
@@ -318,6 +333,8 @@ export default function MapPage() {
   const handleFilterChange = (newFilter: "all" | "friends") => {
     setFilter(newFilter)
     setSelectedQuest(null)
+    setShowQuestDialog(false)
+    setSelectedQuestImageUrl(null)
   }
 
   const getCategoryColor = (category: string) => {
@@ -339,10 +356,6 @@ export default function MapPage() {
     }
   }
 
-  const handleQuestClick = (quest: QuestLocation) => {
-    setSelectedQuest(quest)
-  }
-
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString)
     const now = new Date()
@@ -353,6 +366,50 @@ export default function MapPage() {
     
     const diffInDays = Math.floor(diffInHours / 24)
     return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`
+  }
+
+  // Get signed image URL for private images
+  const getSignedImageUrl = async (imagePath: string): Promise<string> => {
+    try {
+      const { data } = await supabase.storage
+        .from('location-img')
+        .createSignedUrl(imagePath, 3600) // 1 hour expiry
+      return data?.signedUrl || "/placeholder.svg"
+    } catch (error) {
+      console.error('Error getting signed URL:', error)
+      return "/placeholder.svg"
+    }
+  }
+
+  // Handle quest selection and show dialog
+  const handleQuestSelect = async (quest: QuestLocation) => {
+    console.log('🎯 Selecting quest:', quest)
+    console.log('🎯 Quest image data:', { imagePath: quest.imagePath, imageUrl: quest.imageUrl })
+    
+    setSelectedQuest(quest)
+    setShowQuestDialog(true)
+    
+    // Handle image URL
+    let imageUrl = "/placeholder.svg"
+    
+    if (quest.imagePath) {
+      console.log('🎯 Getting signed URL for path:', quest.imagePath)
+      try {
+        imageUrl = await getSignedImageUrl(quest.imagePath)
+        console.log('🎯 Got signed URL:', imageUrl)
+      } catch (error) {
+        console.error('Error getting signed URL:', error)
+        imageUrl = "/placeholder.svg"
+      }
+    } else if (quest.imageUrl) {
+      console.log('🎯 Using direct image URL:', quest.imageUrl)
+      imageUrl = quest.imageUrl
+    } else {
+      console.log('🎯 No image data available, using placeholder')
+    }
+    
+    console.log('🎯 Final image URL:', imageUrl)
+    setSelectedQuestImageUrl(imageUrl)
   }
 
   return (
@@ -432,7 +489,7 @@ export default function MapPage() {
                       No completed quests found
                     </p>
                   ) : (
-                    quests.slice(0, 6).map((quest) => (
+                    quests.slice(0, 5).map((quest) => (
                       <div
                         key={quest.id}
                         className={`p-3 rounded-lg border cursor-pointer transition-colors ${
@@ -440,7 +497,7 @@ export default function MapPage() {
                             ? "border-blue-500 bg-blue-50"
                             : "border-gray-200 hover:border-gray-300"
                         }`}
-                        onClick={() => handleQuestClick(quest)}
+                        onClick={() => handleQuestSelect(quest)}
                       >
                         <div className="flex items-start space-x-3">
                           <Avatar className="w-8 h-8">
@@ -512,6 +569,117 @@ export default function MapPage() {
           </div>
         </div>
       </div>
+
+      {/* Quest Details Popup Dialog */}
+      <Dialog open={showQuestDialog} onOpenChange={(open) => {
+        setShowQuestDialog(open)
+        if (!open) {
+          setSelectedQuestImageUrl(null)
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Quest Details</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowQuestDialog(false)
+                  setSelectedQuestImageUrl(null)
+                }}
+                className="h-6 w-6 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedQuest && (
+            <div className="space-y-4">
+              {/* Quest Photo */}
+              <div className="relative">
+                {selectedQuestImageUrl ? (
+                  <img
+                    src={selectedQuestImageUrl}
+                    alt="Quest completion"
+                    className="w-full h-48 object-cover rounded-lg"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement
+                      target.src = "/placeholder.svg"
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                )}
+              </div>
+
+              {/* Quest Info */}
+              <div className="space-y-3">
+                <div>
+                  <h3 className="font-semibold text-lg">{selectedQuest.title}</h3>
+                  <p className="text-sm text-gray-600 mt-1">{selectedQuest.description}</p>
+                </div>
+
+                {/* User and Location */}
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Avatar className="w-6 h-6">
+                      <AvatarFallback className="text-xs">
+                        {selectedQuest.username[0].toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">{selectedQuest.username}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <MapPin className="w-4 h-4" />
+                    <span>
+                      {selectedQuest.coordinates.lat.toFixed(4)}, {selectedQuest.coordinates.lng.toFixed(4)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Category and Time */}
+                <div className="flex items-center justify-between">
+                  <Badge className={getCategoryColor(selectedQuest.category)}>
+                    {selectedQuest.category}
+                  </Badge>
+                  <span className="text-xs text-gray-500 flex items-center">
+                    <Calendar className="w-3 h-3 mr-1" />
+                    {formatTimeAgo(selectedQuest.completedAt)}
+                  </span>
+                </div>
+
+                {/* Feedback Tags */}
+                {selectedQuest.feedbackTags && selectedQuest.feedbackTags.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Feedback</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedQuest.feedbackTags.map((tag, index) => (
+                        <Badge key={index} variant="outline" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Feedback Text */}
+                {selectedQuest.feedbackText && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Comments</h4>
+                    <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                      {selectedQuest.feedbackText}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
