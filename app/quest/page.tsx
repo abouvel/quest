@@ -7,12 +7,13 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { MapPin, Clock, Star, CheckCircle, Camera, Bug, X, Plus } from "lucide-react"
+import { MapPin, Clock, Star, CheckCircle, Camera, Bug, X, Plus, Calendar } from "lucide-react"
 import Navigation from "@/components/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { questUtils, profileUtils } from "@/lib/supabaseUtils"
 import { supabase } from "@/lib/supabaseClient"
 import { UserService } from "@/lib/userService"
+import { globalQuestStore } from "@/lib/globalQuestStore"
 
 interface DailyQuest {
   id: string
@@ -56,6 +57,8 @@ export default function QuestPage() {
   const [showDebug, setShowDebug] = useState(false)
   const [showCompletionForm, setShowCompletionForm] = useState(false)
   const [userLocation, setUserLocation] = useState("your city")
+  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null)
+  const [locationLoading, setLocationLoading] = useState(false)
   const [completionData, setCompletionData] = useState<QuestCompletion>({
     lat: null,
     lng: null,
@@ -67,11 +70,15 @@ export default function QuestPage() {
   const [photoTaken, setPhotoTaken] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [photoData, setPhotoData] = useState<string | null>(null)
+  const [lastGenerationTime, setLastGenerationTime] = useState<number | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [globalGenerationLock, setGlobalGenerationLock] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const hasGeneratedThisSession = useRef(false)
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated && user) {
+    if (!authLoading && isAuthenticated && user && !hasGeneratedThisSession.current) {
       fetchUserLocation()
       fetchQuest()
     }
@@ -82,6 +89,7 @@ export default function QuestPage() {
   useEffect(() => {
     return () => {
       stopCamera()
+      hasGeneratedThisSession.current = false
     }
   }, [])
 
@@ -137,8 +145,72 @@ export default function QuestPage() {
     }
   }
 
+  const getCurrentLocation = async (): Promise<{lat: number, lng: number} | null> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        console.log('Geolocation is not supported by this browser')
+        resolve(null)
+        return
+      }
+
+      setLocationLoading(true)
+      
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords
+          console.log('Current location obtained:', { lat: latitude, lng: longitude })
+          setCurrentLocation({ lat: latitude, lng: longitude })
+          setLocationLoading(false)
+          resolve({ lat: latitude, lng: longitude })
+        },
+        (error) => {
+          console.error('Error getting location:', error)
+          setLocationLoading(false)
+          resolve(null)
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000 // 5 minutes
+        }
+      )
+    })
+  }
+
+  const handleGetLocation = async () => {
+    const location = await getCurrentLocation()
+    if (location) {
+      setCompletionData(prev => ({
+        ...prev,
+        lat: location.lat,
+        lng: location.lng
+      }))
+    }
+  }
+
   const fetchQuest = async () => {
     if (!user) return
+    
+    // Set flag immediately to prevent duplicate calls
+    if (hasGeneratedThisSession.current) {
+      console.log('Quest already generated this session, skipping...')
+      return
+    }
+    hasGeneratedThisSession.current = true
+    
+    // Check cooldown - prevent multiple generations within 10 seconds
+    const now = Date.now()
+    const cooldownPeriod = 10000 // 10 seconds
+    if (lastGenerationTime && (now - lastGenerationTime) < cooldownPeriod) {
+      console.log('Quest generation on cooldown, skipping...')
+      return
+    }
+    
+    // Prevent concurrent generations with global lock
+    if (isGenerating || globalGenerationLock) {
+      console.log('Quest generation already in progress (global lock), skipping...')
+      return
+    }
     
     try {
       setIsLoading(true)
@@ -191,6 +263,10 @@ export default function QuestPage() {
       
       // If current_quest_id is null or quest not found, generate new one with API
       console.log('No current quest found, generating new quest via API')
+      setIsGenerating(true)
+      setGlobalGenerationLock(true)
+      setLastGenerationTime(now)
+      
       const response = await fetch('/api/generate-quest', {
         method: 'POST',
         headers: {
@@ -206,18 +282,38 @@ export default function QuestPage() {
       const data = await response.json()
       console.log('Generated quest data:', data)
       
-      // Get the newly created quest from database
-      const { data: newQuest, error: fetchNewQuestError } = await supabase
-        .from('quests')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .order('assigned_at', { ascending: false })
-        .limit(1)
-        .single()
+      // Wait for database to be updated and retry fetching the quest
+      let newQuest = null
+      let retryCount = 0
+      const maxRetries = 5
       
-      if (fetchNewQuestError || !newQuest) {
-        console.error('Error fetching newly generated quest:', fetchNewQuestError)
+      while (!newQuest && retryCount < maxRetries) {
+        console.log(`Attempting to fetch newly generated quest (attempt ${retryCount + 1}/${maxRetries})`)
+        
+        // Wait a bit for database to update
+        await new Promise(resolve => setTimeout(resolve, 1000 + (retryCount * 500)))
+        
+        const { data: questData, error: fetchNewQuestError } = await supabase
+          .from('quests')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('assigned_at', { ascending: false })
+          .limit(1)
+          .single()
+        
+        if (!fetchNewQuestError && questData) {
+          newQuest = questData
+          console.log('Successfully found newly generated quest:', newQuest)
+          break
+        }
+        
+        retryCount++
+        console.log(`Quest not found yet, retrying... (${retryCount}/${maxRetries})`)
+      }
+      
+      if (!newQuest) {
+        console.error('Failed to fetch newly generated quest after retries')
         // Use fallback quest from API response
         const fallbackQuest: DailyQuest = {
           id: "fallback-" + Date.now(),
@@ -257,11 +353,18 @@ export default function QuestPage() {
 
       console.log('Using newly generated quest:', quest)
       setTodayQuest(quest)
+      
+      // Update global quest store with new quest
+      if (user) {
+        await globalQuestStore.getAllQuests(user.id, true) // Force refresh
+      }
     } catch (error) {
       console.error('Error fetching quest:', error)
       setTodayQuest(generateMockQuest())
     } finally {
       setIsLoading(false)
+      setIsGenerating(false)
+      setGlobalGenerationLock(false)
     }
   }
 
@@ -306,6 +409,10 @@ export default function QuestPage() {
     
     setIsCompleting(true)
     try {
+      // Use only the coordinates that the user has set
+      const finalLat = completionData.lat
+      const finalLng = completionData.lng
+      
       // Convert photo data URL to file
       const photoFile = dataURLtoFile(photoData, `quest-${todayQuest.id}-${Date.now()}.jpg`)
       
@@ -330,8 +437,8 @@ export default function QuestPage() {
       const completionDataToSave = {
         status: 'completed',
         completed_at: new Date().toISOString(),
-        lat: completionData.lat,
-        lng: completionData.lng,
+        lat: finalLat || null,
+        lng: finalLng || null,
         liked: completionData.liked,
         feedback_tags: completionData.feedback_tags,
         feedback_text: completionData.feedback_text,
@@ -366,6 +473,11 @@ export default function QuestPage() {
       // Update local state
       setTodayQuest({ ...todayQuest, completed: true })
       setShowCompletionForm(false)
+
+      // Update global quest store
+      if (user) {
+        await globalQuestStore.getAllQuests(user.id, true) // Force refresh
+      }
 
     } catch (error) {
       console.error('Error completing quest:', error)
@@ -422,6 +534,7 @@ export default function QuestPage() {
       const success = await UserService.resetUserLocation(user.id)
       if (success) {
         console.log('Location reset successful, refreshing...')
+        hasGeneratedThisSession.current = false
         await fetchUserLocation()
         await fetchQuest()
       }
@@ -492,6 +605,11 @@ export default function QuestPage() {
     return new File([u8arr], filename, { type: mime });
   }
 
+  const handleRetry = () => {
+    hasGeneratedThisSession.current = false
+    fetchQuest()
+  }
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -540,7 +658,7 @@ export default function QuestPage() {
         <div className="container mx-auto px-4 py-8">
           <div className="text-center">
             <p className="text-gray-600">Failed to load quest</p>
-            <Button onClick={fetchQuest} className="mt-4">Retry</Button>
+            <Button onClick={handleRetry} className="mt-4">Retry</Button>
           </div>
         </div>
       </div>
@@ -647,7 +765,35 @@ export default function QuestPage() {
               <CardContent className="space-y-6">
                 {/* Location */}
                 <div className="space-y-2">
-                  <Label>Location (optional)</Label>
+                  <Label className="flex items-center">
+                    <MapPin className="w-4 h-4 mr-2" />
+                    Quest Completion Location
+                  </Label>
+                  <div className="flex space-x-2">
+                    <Button
+                      onClick={handleGetLocation}
+                      variant="outline"
+                      disabled={locationLoading}
+                      className="flex-1"
+                    >
+                      {locationLoading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                          Getting Location...
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="w-4 h-4 mr-2" />
+                          {currentLocation ? 'Update Location' : 'Get Current Location'}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {currentLocation && (
+                    <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
+                      ✓ Location obtained: {currentLocation.lat.toFixed(6)}, {currentLocation.lng.toFixed(6)}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <Input
                       type="number"

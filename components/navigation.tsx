@@ -1,16 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Home, MapPin, Trophy, Calendar, User, Settings, LogOut, Users } from "lucide-react"
+import { Home, MapPin, Trophy, Calendar, User, Settings, LogOut, Users, RefreshCw } from "lucide-react"
+import { useAuth } from "@/hooks/useAuth"
+import { supabase } from "@/lib/supabaseClient"
 
 export default function Navigation() {
   const pathname = usePathname()
-  const [user] = useState({ username: "you", avatar: "/placeholder.svg?height=32&width=32" })
+  const { user, isAuthenticated } = useAuth()
 
   const navItems = [
     { href: "/dashboard", label: "Feed", icon: Home },
@@ -25,6 +27,32 @@ export default function Navigation() {
     window.location.href = "/"
   }
 
+  const simulateNewDay = async () => {
+    if (!user) return
+    
+    try {
+      console.log('Simulating new day for user:', user.id)
+      
+      // Clear the current quest ID from the user
+      const { error } = await supabase
+        .from('users')
+        .update({ current_quest_id: null })
+        .eq('id', user.id)
+      
+      if (error) {
+        console.error('Error clearing current quest:', error)
+        return
+      }
+      
+      console.log('New day simulation complete - current quest cleared')
+      
+      // Always reload the page to reset session flags and get a fresh quest
+      window.location.reload()
+    } catch (error) {
+      console.error('Error simulating new day:', error)
+    }
+  }
+
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div className="container mx-auto px-4">
@@ -36,6 +64,19 @@ export default function Navigation() {
             </div>
             <span className="text-xl font-bold text-gray-900">QuestMap</span>
           </Link>
+
+          {/* Simulate New Day Button */}
+          {isAuthenticated && (
+            <Button 
+              onClick={simulateNewDay}
+              variant="outline"
+              size="sm"
+              className="border-yellow-300 text-yellow-700 hover:bg-yellow-100"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              New Day
+            </Button>
+          )}
 
           {/* Navigation Links */}
           <div className="hidden md:flex items-center space-x-1">
@@ -59,10 +100,10 @@ export default function Navigation() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center space-x-2 p-2">
                 <Avatar className="w-8 h-8">
-                  <AvatarImage src={user.avatar || "/placeholder.svg"} />
-                  <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
+                  <AvatarImage src="/placeholder.svg" />
+                  <AvatarFallback>{(user?.user_metadata?.username || user?.email?.[0] || 'U').toUpperCase()}</AvatarFallback>
                 </Avatar>
-                <span className="hidden md:block">{user.username}</span>
+                <span className="hidden md:block">{user?.user_metadata?.username || user?.email?.split('@')[0] || 'User'}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">

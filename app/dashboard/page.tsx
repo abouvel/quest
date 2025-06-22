@@ -135,7 +135,10 @@ export default function Dashboard() {
               let imageUrl = "/placeholder.svg?height=300&width=400"
               if (quest.image_path) {
                 // Get signed URL for private image
+                console.log("Getting signed image for:", quest.image_path)
+
                 imageUrl = await getSignedImageUrl(quest.image_path)
+              
               } else if (quest.image_url) {
                 // Use public URL if available
                 imageUrl = quest.image_url
@@ -176,8 +179,21 @@ export default function Dashboard() {
   }
 
   const handleLike = async (postId: string) => {
-    // This could be enhanced with actual like functionality
-    setPosts(posts.map((post) => (post.id === postId ? { ...post, likes: post.likes + 1 } : post)))
+    setPosts(posts.map((post) => {
+      if (post.id === postId) {
+        // If already liked, don't change anything (prevent multiple likes)
+        if (post.liked) {
+          return post
+        }
+        // If not liked, like it and increment count
+        return { 
+          ...post, 
+          liked: true, 
+          likes: post.likes + 1 
+        }
+      }
+      return post
+    }))
   }
 
   const handleComment = async (postId: string) => {
@@ -296,7 +312,7 @@ export default function Dashboard() {
                         onClick={() => handleLike(post.id)}
                         className="flex items-center space-x-2"
                       >
-                        <Heart className="w-4 h-4" />
+                        <Heart className={`w-4 h-4 ${post.liked ? 'fill-black text-black' : ''}`} />
                         <span>{post.likes}</span>
                       </Button>
 

@@ -1,21 +1,42 @@
 import dotenv from "dotenv";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { validateQuestLocation } from "./lib/mapsApi.js";
+import { globalQuestStore } from "./lib/globalQuestStore.ts";
 
 dotenv.config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-export async function generateQuest(user, completedTitles) {
+export async function generateQuest(user, completedTitles = []) {
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  // Get completed quest titles from global store if available
+  let questTitles = completedTitles;
+
+  try {
+    // Try to get quests from global store first
+    const allQuests = await globalQuestStore.getAllQuests(user.id);
+    const completedQuests = globalQuestStore.getCompletedQuests();
+    const incompleteQuests = globalQuestStore.getIncompleteQuests();
+
+    // Combine both completed and incomplete quest titles
+    const completedTitles = completedQuests.map(quest => quest.title);
+    const incompleteTitles = incompleteQuests.map(quest => quest.title);
+    questTitles = [...completedTitles, ...incompleteTitles];
+
+    console.log('Using quest titles from global store - Completed:', completedTitles.length, 'Incomplete:', incompleteTitles.length);
+  } catch (error) {
+    console.log('Global store not available, using provided completedTitles:', completedTitles.length);
+    questTitles = completedTitles;
+  }
 
   const prompt = `
   Generate one fun, short, creative real-world activity that someone can do in ${user.location}.
   Their preferences are: ${user.interests.join(", ")}.
-  Only return quests they haven't already done: [${completedTitles.join(", ")}].
+  
+  IMPORTANT: Do not suggest any of these events - avoid them completely: [${questTitles.join(", ")}].
+  
 Keep it under 25 words and give it a title and 1-sentence description.
-
-IMPORTANT: Be creative and varied! Don't repeat the same type of activity. Try different venues, different activities etc.
 
 The quest needs to be specific to a certain location. Simply saying "Go to a restaurant and try a new dish" is not enough.
 The quest should name a specific restaurant, cafe, park, etc that has good reviews and is a popular spot.
@@ -48,10 +69,10 @@ Return ONLY valid JSON in this exact format:
 
   try {
     const questData = JSON.parse(cleaned);
-    
+
     // Validate and enhance the quest with real location data
     const enhancedQuest = await validateQuestLocation(questData, user.location);
-    
+
     // Add debugging information
     return {
       ...enhancedQuest,
@@ -59,7 +80,7 @@ Return ONLY valid JSON in this exact format:
         userLocation: user.location,
         userInterests: user.interests,
         userPreference: user.preference,
-        completedTitles: completedTitles,
+        completedTitles: questTitles,
         prompt: prompt
       }
     };
