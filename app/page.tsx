@@ -20,6 +20,7 @@ export default function LandingPage() {
   const [username, setUsername] = useState("")
   const [mounted, setMounted] = useState(false)
   const [authError, setAuthError] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
   const [hasCompletedPreferences, setHasCompletedPreferences] = useState(false)
 
   useEffect(() => {
@@ -67,13 +68,26 @@ export default function LandingPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
     setAuthError("")
+    setSuccessMessage("")
     
     const { error } = await signUp(email, password, username)
     if (error) {
       setAuthError(error)
     } else {
-      // Redirect to preferences after successful signup
-      window.location.href = "/preferences"
+      // Show success message and redirect to signin
+      setSuccessMessage("Account created successfully! Please sign in.")
+      // Switch to login tab after successful signup
+      const tabsList = document.querySelector('[role="tablist"]') as HTMLElement
+      if (tabsList) {
+        const loginTab = tabsList.querySelector('[value="login"]') as HTMLElement
+        if (loginTab) {
+          loginTab.click()
+        }
+      }
+      // Clear the form
+      setEmail("")
+      setPassword("")
+      setUsername("")
     }
   }
 
@@ -135,13 +149,21 @@ export default function LandingPage() {
                         {authError}
                       </div>
                     )}
+                    {successMessage && (
+                      <div className="text-green-600 text-sm bg-green-50 p-2 rounded">
+                        {successMessage}
+                      </div>
+                    )}
                     <div>
                       <Label htmlFor="email">Email</Label>
                       <Input
                         id="email"
                         type="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                          setEmail(e.target.value)
+                          setSuccessMessage("")
+                        }}
                         required
                       />
                     </div>
@@ -151,7 +173,10 @@ export default function LandingPage() {
                         id="password"
                         type="password"
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(e) => {
+                          setPassword(e.target.value)
+                          setSuccessMessage("")
+                        }}
                         required
                       />
                     </div>

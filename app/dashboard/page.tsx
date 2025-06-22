@@ -10,6 +10,7 @@ import { Heart, MessageCircle, MapPin, Clock, Flame, Calendar } from "lucide-rea
 import Navigation from "@/components/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { questUtils, userUtils } from "@/lib/supabaseUtils"
+import { supabase } from "@/lib/supabaseClient"
 
 interface QuestPost {
   id: string
@@ -19,11 +20,13 @@ interface QuestPost {
   location: string
   completedAt: string
   image: string
+  image_path?: string
   likes: number
   comments: string[]
   streak: number
   feedback_tags: string[]
   liked: boolean
+  isOwn: boolean
 }
 
 export default function Dashboard() {
@@ -31,6 +34,25 @@ export default function Dashboard() {
   const [posts, setPosts] = useState<QuestPost[]>([])
   const [newComment, setNewComment] = useState<{ [key: string]: string }>({})
   const [loading, setLoading] = useState(true)
+
+  // Function to get signed URL for private images
+  const getSignedImageUrl = async (imagePath: string): Promise<string> => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('location-img')
+        .createSignedUrl(imagePath, 3600) // 1 hour expiry
+      
+      if (error) {
+        console.error('Error getting signed URL:', error)
+        return "/placeholder.svg?height=300&width=400"
+      }
+      
+      return data.signedUrl
+    } catch (error) {
+      console.error('Error getting signed URL:', error)
+      return "/placeholder.svg?height=300&width=400"
+    }
+  }
 
   useEffect(() => {
     // Redirect to landing page if not authenticated
@@ -53,35 +75,90 @@ export default function Dashboard() {
         return
       }
       
-      // Fetch completed quests for the current user only
-      const { data: quests, error } = await questUtils.getQuestHistory(user.id, 50)
+      // Fetch completed quests for the current user
+      const { data: userQuests, error: userError } = await questUtils.getQuestHistory(user.id, 50)
       
-      if (error) {
-        console.error('Error fetching quests:', error)
-        setPosts([])
-        return
+      if (userError) {
+        console.error('Error fetching user quests:', userError)
       }
 
-      if (quests && quests.length > 0) {
+      // Fetch user's friends
+      const { data: friends, error: friendsError } = await userUtils.getFriends(user.id)
+      
+      if (friendsError) {
+        console.error('Error fetching friends:', friendsError)
+      }
+
+      // Fetch completed quests for all friends
+      let friendsQuests: any[] = []
+      if (friends && friends.length > 0) {
+        const friendIds = friends.map(friend => friend.id)
+        
+        // Fetch quests for all friends in parallel
+        const friendQuestsPromises = friendIds.map(async (friendId) => {
+          const { data: quests, error } = await questUtils.getQuestHistory(friendId, 20)
+          if (!error && quests) {
+            return quests.map((quest: any) => ({ ...quest, friendId }))
+          }
+          return []
+        })
+        
+        const friendQuestsResults = await Promise.all(friendQuestsPromises)
+        friendsQuests = friendQuestsResults.flat()
+      }
+
+      // Combine user quests and friends quests
+      const allQuests = [
+        ...(userQuests || []).map((quest: any) => ({ ...quest, isOwn: true })),
+        ...friendsQuests.map((quest: any) => ({ ...quest, isOwn: false }))
+      ]
+
+      if (allQuests.length > 0) {
         // Transform quests into posts format
-        const transformedPosts = quests
-          .filter((quest: any) => quest.status === 'completed')
-          .map((quest: any) => {
-            return {
-              id: quest.id,
-              username: user.user_metadata?.username || user.email?.split('@')[0] || 'You',
-              questName: `Quest: ${quest.description.substring(0, 50)}${quest.description.length > 50 ? '...' : ''}`,
-              description: quest.description,
-              location: quest.lat && quest.lng ? `📍 ${quest.lat.toFixed(4)}, ${quest.lng.toFixed(4)}` : 'Location not specified',
-              completedAt: new Date(quest.completed_at).toLocaleString(),
-              image: "/placeholder.svg?height=300&width=400", // Could be enhanced with actual photos later
-              likes: 0, // Could be enhanced with actual likes system
-              comments: [], // Could be enhanced with actual comments system
-              streak: 1, // Will be updated when we fetch user data
-              feedback_tags: quest.feedback_tags || [],
-              liked: quest.liked || false
-            }
-          })
+        const transformedPosts = await Promise.all(
+          allQuests
+            .filter((quest: any) => quest.status === 'completed')
+            .map(async (quest: any) => {
+              // Find friend info if this is a friend's quest
+              let username = user.user_metadata?.username || user.email?.split('@')[0] || 'You'
+              let streak = 1
+              
+              if (!quest.isOwn && quest.friendId) {
+                const friend = friends?.find(f => f.id === quest.friendId)
+                if (friend) {
+                  username = friend.username || 'Friend'
+                  streak = friend.streak_count || 1
+                }
+              }
+
+              // Handle image URL - prefer image_path for private images, fallback to image_url
+              let imageUrl = "/placeholder.svg?height=300&width=400"
+              if (quest.image_path) {
+                // Get signed URL for private image
+                imageUrl = await getSignedImageUrl(quest.image_path)
+              } else if (quest.image_url) {
+                // Use public URL if available
+                imageUrl = quest.image_url
+              }
+
+              return {
+                id: quest.id,
+                username: quest.isOwn ? username : username,
+                questName: quest.title || `Quest: ${quest.description.substring(0, 50)}${quest.description.length > 50 ? '...' : ''}`,
+                description: quest.description,
+                location: quest.lat && quest.lng ? `📍 ${quest.lat.toFixed(4)}, ${quest.lng.toFixed(4)}` : 'Location not specified',
+                completedAt: new Date(quest.completed_at).toLocaleString(),
+                image: imageUrl,
+                image_path: quest.image_path,
+                likes: 0,
+                comments: [],
+                streak: streak,
+                feedback_tags: quest.feedback_tags || [],
+                liked: quest.liked || false,
+                isOwn: quest.isOwn
+              }
+            })
+        )
 
         // Sort by completion date (newest first)
         transformedPosts.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
@@ -133,8 +210,8 @@ export default function Dashboard() {
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Quest History</h1>
-            <p className="text-gray-600">Track your completed adventures and achievements</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Quest Feed</h1>
+            <p className="text-gray-600">Your completed adventures and your friends' achievements</p>
           </div>
 
           {posts.length === 0 ? (
@@ -162,6 +239,11 @@ export default function Dashboard() {
                         <div>
                           <div className="flex items-center space-x-2">
                             <h3 className="font-semibold">{post.username}</h3>
+                            {post.isOwn && (
+                              <Badge variant="default" className="bg-blue-100 text-blue-800">
+                                You
+                              </Badge>
+                            )}
                             <Badge variant="secondary" className="flex items-center space-x-1">
                               <Flame className="w-3 h-3" />
                               <span>{post.streak}</span>
