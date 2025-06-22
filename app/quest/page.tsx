@@ -476,11 +476,29 @@ export default function QuestPage() {
 
     try {
       console.log('Resetting location for user:', user.id)
+      
+      // Get current preference_tags to preserve other settings
+      const { data: currentUser, error: fetchError } = await supabase
+        .from('users')
+        .select('preference_tags')
+        .eq('id', user.id)
+        .single()
+
+      if (fetchError) {
+        throw fetchError
+      }
+
+      // Create updated preference_tags with location cleared but other settings preserved
+      const updatedPreferenceTags = {
+        ...currentUser.preference_tags,
+        location: null // Clear only the location, preserve other preferences
+      }
+
       const { error } = await supabase
         .from('users')
         .update({
           location_description: null,
-          preference_tags: {}
+          preference_tags: updatedPreferenceTags
         })
         .eq('id', user.id)
 

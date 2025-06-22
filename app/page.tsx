@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { MapPin, Trophy, Users, Calendar } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/hooks/useAuth"
 import { profileUtils } from "@/lib/supabaseUtils"
@@ -39,9 +38,12 @@ export default function LandingPage() {
     
     try {
       const { data: userData } = await profileUtils.getProfile(user.id)
-      // Check if user has preference_tags set (not empty object)
-      const hasPrefs = userData && userData.preference_tags && Object.keys(userData.preference_tags).length > 0
-      setHasCompletedPreferences(hasPrefs)
+      // Check if user has a location set (either in location_description or preference_tags.location)
+      const hasLocation = userData && (
+        userData.location_description || 
+        (userData.preference_tags && userData.preference_tags.location)
+      )
+      setHasCompletedPreferences(hasLocation)
     } catch (error) {
       console.error('Error checking preferences:', error)
       setHasCompletedPreferences(false)
@@ -109,24 +111,6 @@ export default function LandingPage() {
         <div className="text-center mb-12">
           <h1 className="text-5xl font-bold text-gray-900 mb-4">QuestMap</h1>
           <p className="text-xl text-gray-600 mb-8">Discover daily adventures based on your location and preferences</p>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            <div className="text-center">
-              <MapPin className="w-12 h-12 mx-auto mb-4 text-blue-600" />
-              <h3 className="text-lg font-semibold mb-2">Location-Based Quests</h3>
-              <p className="text-gray-600">Get personalized daily activities based on your location and interests</p>
-            </div>
-            <div className="text-center">
-              <Users className="w-12 h-12 mx-auto mb-4 text-green-600" />
-              <h3 className="text-lg font-semibold mb-2">Social Features</h3>
-              <p className="text-gray-600">Connect with friends, share your adventures, and see where they've been</p>
-            </div>
-            <div className="text-center">
-              <Trophy className="w-12 h-12 mx-auto mb-4 text-yellow-600" />
-              <h3 className="text-lg font-semibold mb-2">Streak Tracking</h3>
-              <p className="text-gray-600">Build streaks, compete with friends, and climb the leaderboard</p>
-            </div>
-          </div>
         </div>
 
         <div className="max-w-md mx-auto">

@@ -5,8 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Home, MapPin, Trophy, Calendar, User, Settings, LogOut, Users, RefreshCw } from "lucide-react"
+import { Home, MapPin, Trophy, Calendar, Users, RefreshCw } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 import { supabase } from "@/lib/supabaseClient"
 
@@ -20,11 +19,6 @@ export default function Navigation() {
     { href: "/friends", label: "Friends", icon: Users },
     { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   ]
-
-  const handleLogout = () => {
-    localStorage.removeItem("currentUser")
-    window.location.href = "/"
-  }
 
   const simulateNewDay = async () => {
     if (!user) return
@@ -94,32 +88,14 @@ export default function Navigation() {
               </Button>
             )}
 
-            {/* User Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center space-x-2 p-2">
-                  <Avatar className="w-8 h-8">
-                    <AvatarImage src="/placeholder.svg" />
-                    <AvatarFallback>{(user?.user_metadata?.username || user?.email?.[0] || 'U').toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <span className="hidden md:block">{user?.user_metadata?.username || user?.email?.split('@')[0] || 'User'}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem>
-                  <User className="w-4 h-4 mr-2" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* User Avatar (Non-clickable) */}
+            <div className="flex items-center space-x-2 p-2">
+              <Avatar className="w-8 h-8">
+                <AvatarImage src="/placeholder.svg" />
+                <AvatarFallback>{(user?.user_metadata?.username || user?.email?.[0] || 'U').toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <span className="hidden md:block">{user?.user_metadata?.username || user?.email?.split('@')[0] || 'User'}</span>
+            </div>
           </div>
         </div>
 
