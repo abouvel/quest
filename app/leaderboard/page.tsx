@@ -6,103 +6,124 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Trophy, Flame, Star, Medal, Crown } from "lucide-react"
 import Navigation from "@/components/navigation"
+import { useAuth } from "@/hooks/useAuth"
+import { supabase } from "@/lib/supabaseClient"
+import { userUtils } from "@/lib/supabaseUtils"
 
-interface LeaderboardUser {
+interface LeaderboardEntry {
   id: string
   username: string
-  currentStreak: number
-  totalQuests: number
-  totalPoints: number
-  rank: number
-  avatar: string
-  isCurrentUser?: boolean
+  questCount: number
+  streak: number
+  isCurrentUser: boolean
+  isFriend: boolean
 }
 
 export default function LeaderboardPage() {
-  const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([])
-  const [timeframe, setTimeframe] = useState<"week" | "month" | "allTime">("week")
+  const { user, isAuthenticated, loading: authLoading } = useAuth()
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Mock leaderboard data
-    const mockLeaderboard: LeaderboardUser[] = [
-      {
-        id: "1",
-        username: "sarah_adventurer",
-        currentStreak: 28,
-        totalQuests: 45,
-        totalPoints: 6750,
-        rank: 1,
-        avatar: "/placeholder.svg?height=40&width=40",
-      },
-      {
-        id: "2",
-        username: "alex_explorer",
-        currentStreak: 21,
-        totalQuests: 38,
-        totalPoints: 5700,
-        rank: 2,
-        avatar: "/placeholder.svg?height=40&width=40",
-      },
-      {
-        id: "3",
-        username: "mike_foodie",
-        currentStreak: 15,
-        totalQuests: 32,
-        totalPoints: 4800,
-        rank: 3,
-        avatar: "/placeholder.svg?height=40&width=40",
-      },
-      {
-        id: "4",
-        username: "you",
-        currentStreak: 12,
-        totalQuests: 28,
-        totalPoints: 4200,
-        rank: 4,
-        avatar: "/placeholder.svg?height=40&width=40",
-        isCurrentUser: true,
-      },
-      {
-        id: "5",
-        username: "emma_culture",
-        currentStreak: 9,
-        totalQuests: 25,
-        totalPoints: 3750,
-        rank: 5,
-        avatar: "/placeholder.svg?height=40&width=40",
-      },
-      {
-        id: "6",
-        username: "david_hiker",
-        currentStreak: 7,
-        totalQuests: 22,
-        totalPoints: 3300,
-        rank: 6,
-        avatar: "/placeholder.svg?height=40&width=40",
-      },
-      {
-        id: "7",
-        username: "lisa_photographer",
-        currentStreak: 5,
-        totalQuests: 18,
-        totalPoints: 2700,
-        rank: 7,
-        avatar: "/placeholder.svg?height=40&width=40",
-      },
-    ]
-    setLeaderboard(mockLeaderboard)
-  }, [timeframe])
+    if (!authLoading && isAuthenticated && user) {
+      fetchLeaderboardData()
+    }
+  }, [authLoading, isAuthenticated, user])
+
+  const fetchLeaderboardData = async () => {
+    if (!user) return
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Get current user's data
+      const { data: currentUserData, error: userError } = await supabase
+        .from('users')
+        .select('id, username, streak_count')
+        .eq('id', user.id)
+        .single()
+      if (userError) {
+        setError('Failed to fetch user profile')
+        return
+      }
+
+      // Get user's friends
+      const { data: friends, error: friendsError } = await userUtils.getFriends(user.id)
+      if (friendsError) {
+        console.error('Error fetching friends:', friendsError)
+        // Continue without friends if there's an error
+      }
+
+      // Get all quests
+      const { data: questCounts, error: questError } = await supabase
+        .from('quests')
+        .select('user_id, status, completed_at')
+      if (questError) {
+        setError('Failed to fetch quests')
+        return
+      }
+
+      // Build leaderboard data: current user + friends
+      const leaderboardUsers = [
+        { id: currentUserData.id, username: currentUserData.username, streak_count: currentUserData.streak_count, isCurrentUser: true, isFriend: false },
+        ...(friends || []).map(friend => ({ 
+          id: friend.id, 
+          username: friend.username, 
+          streak_count: friend.streak_count, 
+          isCurrentUser: false, 
+          isFriend: true 
+        }))
+      ]
+
+      // Calculate quest counts for each user
+      const userStats = leaderboardUsers.map(userData => {
+        const userQuests = questCounts.filter(q => q.user_id === userData.id)
+        const completedQuests = userQuests.filter(q => q.status === 'completed')
+        
+        return {
+          id: userData.id,
+          username: userData.username || 'User',
+          questCount: completedQuests.length,
+          streak: userData.streak_count || 0,
+          isCurrentUser: userData.isCurrentUser,
+          isFriend: userData.isFriend
+        }
+      })
+
+      // Sort by streak (descending)
+      const sortedData = userStats.sort((a, b) => b.streak - a.streak)
+      setLeaderboardData(sortedData)
+    } catch (err) {
+      setError('Failed to fetch leaderboard data')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
-      case 1:
+      case 0:
         return <Crown className="w-6 h-6 text-yellow-500" />
-      case 2:
+      case 1:
         return <Medal className="w-6 h-6 text-gray-400" />
-      case 3:
+      case 2:
         return <Medal className="w-6 h-6 text-amber-600" />
       default:
-        return <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-500">#{rank}</span>
+        return <Trophy className="w-5 h-5 text-gray-400" />
+    }
+  }
+
+  const getRankColor = (rank: number) => {
+    switch (rank) {
+      case 0:
+        return "bg-gradient-to-r from-yellow-400 to-yellow-600 text-white"
+      case 1:
+        return "bg-gradient-to-r from-gray-300 to-gray-500 text-white"
+      case 2:
+        return "bg-gradient-to-r from-amber-500 to-amber-700 text-white"
+      default:
+        return "bg-white hover:bg-gray-50"
     }
   }
 
@@ -116,150 +137,157 @@ export default function LeaderboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
-
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center justify-center">
-              <Trophy className="w-8 h-8 mr-3 text-yellow-500" />
-              Leaderboard
-            </h1>
-            <p className="text-gray-600">See who's dominating the quest scene</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Leaderboard</h1>
+            <p className="text-gray-600">See who's completing the most quests!</p>
           </div>
-
-          {/* Timeframe Selector */}
-          <div className="flex justify-center mb-8">
-            <div className="bg-white rounded-lg p-1 shadow-sm border">
-              {(["week", "month", "allTime"] as const).map((period) => (
-                <button
-                  key={period}
-                  onClick={() => setTimeframe(period)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    timeframe === period ? "bg-blue-600 text-white" : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  {period === "allTime" ? "All Time" : period.charAt(0).toUpperCase() + period.slice(1)}
-                </button>
-              ))}
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading leaderboard...</p>
             </div>
-          </div>
-
-          {/* Top 3 Podium */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            {leaderboard.slice(0, 3).map((user, index) => (
-              <Card
-                key={user.id}
-                className={`text-center ${index === 0 ? "md:order-2 ring-2 ring-yellow-400" : index === 1 ? "md:order-1" : "md:order-3"}`}
-              >
-                <CardContent className="pt-6">
-                  <div className="flex justify-center mb-4">{getRankIcon(user.rank)}</div>
-                  <Avatar className="w-16 h-16 mx-auto mb-4">
-                    <AvatarImage src={user.avatar || "/placeholder.svg"} />
-                    <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <h3 className="font-semibold text-lg mb-2">{user.username}</h3>
-                  <div className="space-y-2">
-                    <Badge
-                      className={`${getStreakBadgeColor(user.currentStreak)} flex items-center justify-center w-fit mx-auto`}
-                    >
-                      <Flame className="w-3 h-3 mr-1" />
-                      {user.currentStreak} day streak
-                    </Badge>
-                    <div className="text-sm text-gray-600">
-                      <div className="flex items-center justify-center space-x-4">
-                        <span className="flex items-center">
-                          <Star className="w-3 h-3 mr-1 text-yellow-500" />
-                          {user.totalPoints}
-                        </span>
-                        <span>{user.totalQuests} quests</span>
+          ) : error ? (
+            <Card className="text-center py-12">
+              <CardContent>
+                <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-red-600 mb-2">Error: {error}</h3>
+                <button 
+                  onClick={fetchLeaderboardData}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                >
+                  Retry
+                </button>
+              </CardContent>
+            </Card>
+          ) : leaderboardData.length === 0 ? (
+            <Card className="text-center py-12">
+              <CardContent>
+                <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Leaderboard Data</h3>
+                <p className="text-gray-600 mb-4">Add some friends to see your ranking!</p>
+                <button 
+                  onClick={() => window.location.href = "/friends"}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                >
+                  Add Friends
+                </button>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Top 3 Podium */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                {leaderboardData.slice(0, 3).map((entry, index) => (
+                  <Card
+                    key={entry.id}
+                    className={`text-center ${index === 0 ? "md:order-2 ring-2 ring-yellow-400" : index === 1 ? "md:order-1" : "md:order-3"}`}
+                  >
+                    <CardContent className="pt-6">
+                      <div className="flex justify-center mb-4">{getRankIcon(index)}</div>
+                      <Avatar className="w-16 h-16 mx-auto mb-4">
+                        <AvatarImage src={"/placeholder.svg"} />
+                        <AvatarFallback>{entry.username[0].toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <h3 className="font-semibold text-lg mb-2">{entry.username}</h3>
+                      <div className="space-y-2">
+                        <Badge
+                          className={`${getStreakBadgeColor(entry.streak)} flex items-center justify-center w-fit mx-auto`}
+                        >
+                          <Flame className="w-3 h-3 mr-1" />
+                          {entry.streak} day streak
+                        </Badge>
+                        <div className="text-sm text-gray-600">
+                          <div className="flex items-center justify-center space-x-4">
+                            <span className="flex items-center">
+                              <Star className="w-3 h-3 mr-1 text-yellow-500" />
+                              {entry.questCount}
+                            </span>
+                            <span>{entry.questCount} quests</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              {/* Full Leaderboard List */}
+              <Card>
+                <CardContent>
+                  <div className="space-y-3">
+                    {leaderboardData.map((entry, index) => (
+                      <div
+                        key={entry.id}
+                        className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
+                          entry.isCurrentUser ? "bg-blue-50 border-blue-200" : "bg-white hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className="flex items-center space-x-4">
+                          <div className="flex items-center justify-center w-8">{getRankIcon(index)}</div>
+                          <Avatar className="w-10 h-10">
+                            <AvatarImage src={"/placeholder.svg"} />
+                            <AvatarFallback>{entry.username[0].toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <h4 className="font-semibold flex items-center">
+                              {entry.username}
+                              {entry.isCurrentUser && (
+                                <Badge variant="outline" className="ml-2 text-xs">
+                                  You
+                                </Badge>
+                              )}
+                              {entry.isFriend && !entry.isCurrentUser && (
+                                <Badge variant="secondary" className="ml-2 text-xs">
+                                  Friend
+                                </Badge>
+                              )}
+                            </h4>
+                          </div>
+                        </div>
+                        <Badge className={`${getStreakBadgeColor(entry.streak)} flex items-center`}>
+                          <Flame className="w-3 h-3 mr-1" />
+                          {entry.streak}
+                        </Badge>
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-
-          {/* Full Leaderboard */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Full Rankings</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {leaderboard.map((user) => (
-                  <div
-                    key={user.id}
-                    className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
-                      user.isCurrentUser ? "bg-blue-50 border-blue-200" : "bg-white hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center justify-center w-8">{getRankIcon(user.rank)}</div>
-
-                      <Avatar className="w-10 h-10">
-                        <AvatarImage src={user.avatar || "/placeholder.svg"} />
-                        <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
-                      </Avatar>
-
-                      <div>
-                        <h4 className="font-semibold flex items-center">
-                          {user.username}
-                          {user.isCurrentUser && (
-                            <Badge variant="outline" className="ml-2 text-xs">
-                              You
-                            </Badge>
-                          )}
-                        </h4>
-                        <div className="flex items-center space-x-3 text-sm text-gray-600">
-                          <span className="flex items-center">
-                            <Star className="w-3 h-3 mr-1 text-yellow-500" />
-                            {user.totalPoints} pts
-                          </span>
-                          <span>{user.totalQuests} quests</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Badge className={`${getStreakBadgeColor(user.currentStreak)} flex items-center`}>
-                      <Flame className="w-3 h-3 mr-1" />
-                      {user.currentStreak}
-                    </Badge>
+              {/* Stats Cards */}
+              {(() => {
+                const currentUser = leaderboardData.find(entry => entry.isCurrentUser)
+                return currentUser ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+                    <Card>
+                      <CardContent className="text-center">
+                        <Flame className="w-8 h-8 text-red-500 mx-auto mb-2" />
+                        <h3 className="font-semibold text-lg">Your Streak</h3>
+                        <p className="text-2xl font-bold text-red-600">{currentUser.streak} days</p>
+                        <p className="text-sm text-gray-600">Keep it up!</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="text-center">
+                        <Trophy className="w-8 h-8 text-yellow-500 mx-auto mb-2" />
+                        <h3 className="font-semibold text-lg">Your Rank</h3>
+                        <p className="text-2xl font-bold text-yellow-600">#{leaderboardData.indexOf(currentUser) + 1}</p>
+                        <p className="text-sm text-gray-600">Out of {leaderboardData.length} users</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="text-center">
+                        <Star className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                        <h3 className="font-semibold text-lg">Total Points</h3>
+                        <p className="text-2xl font-bold text-blue-600">{currentUser.questCount * 150}</p>
+                        <p className="text-sm text-gray-600">All time</p>
+                      </CardContent>
+                    </Card>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-            <Card>
-              <CardContent className="text-center pt-6">
-                <Flame className="w-8 h-8 text-red-500 mx-auto mb-2" />
-                <h3 className="font-semibold text-lg">Your Streak</h3>
-                <p className="text-2xl font-bold text-red-600">12 days</p>
-                <p className="text-sm text-gray-600">Keep it up!</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="text-center pt-6">
-                <Trophy className="w-8 h-8 text-yellow-500 mx-auto mb-2" />
-                <h3 className="font-semibold text-lg">Your Rank</h3>
-                <p className="text-2xl font-bold text-yellow-600">#4</p>
-                <p className="text-sm text-gray-600">Out of 127 users</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="text-center pt-6">
-                <Star className="w-8 h-8 text-blue-500 mx-auto mb-2" />
-                <h3 className="font-semibold text-lg">Total Points</h3>
-                <p className="text-2xl font-bold text-blue-600">4,200</p>
-                <p className="text-sm text-gray-600">This month</p>
-              </CardContent>
-            </Card>
-          </div>
+                ) : null
+              })()}
+            </>
+          )}
         </div>
       </div>
     </div>
