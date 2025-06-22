@@ -23,6 +23,8 @@ import {
   MapPin,
   Clock,
 } from "lucide-react"
+import { useAuth } from "@/hooks/useAuth"
+import { userUtils } from "@/lib/supabaseUtils"
 
 interface UserPreferences {
   location: string
@@ -75,7 +77,9 @@ const timeSlots = [
 ]
 
 export default function PreferencesPage() {
+  const { user, loading, isAuthenticated } = useAuth()
   const [currentStep, setCurrentStep] = useState(1)
+  const [saving, setSaving] = useState(false)
   const [preferences, setPreferences] = useState<UserPreferences>({
     location: "",
     interests: [],
@@ -94,11 +98,10 @@ export default function PreferencesPage() {
 
   useEffect(() => {
     // Check if user is authenticated
-    const currentUser = localStorage.getItem("currentUser")
-    if (!currentUser) {
+    if (!loading && !isAuthenticated) {
       window.location.href = "/"
     }
-  }, [])
+  }, [loading, isAuthenticated])
 
   const handleInterestToggle = (interestId: string) => {
     setPreferences((prev) => ({
@@ -127,18 +130,43 @@ export default function PreferencesPage() {
     }))
   }
 
-  const handleSavePreferences = () => {
-    // Save preferences to user profile
-    const currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}")
-    const updatedUser = {
-      ...currentUser,
-      preferences,
-      hasCompletedPreferences: true,
-    }
-    localStorage.setItem("currentUser", JSON.stringify(updatedUser))
+  const handleSavePreferences = async () => {
+    if (!user) return
+    
+    setSaving(true)
+    try {
+      // Convert preferences to preference_tags format for your schema
+      const preferenceTags = {
+        location: preferences.location,
+        interests: preferences.interests,
+        activityTypes: preferences.activityTypes,
+        difficultyPreference: preferences.difficultyPreference,
+        timePreference: preferences.timePreference,
+        budgetRange: preferences.budgetRange,
+        indoorOutdoorPreference: preferences.indoorOutdoorPreference,
+        socialPreference: preferences.socialPreference,
+        explorationRadius: preferences.explorationRadius,
+        questFrequency: preferences.questFrequency,
+        bio: preferences.bio,
+      }
 
-    // Redirect to dashboard
-    window.location.href = "/dashboard"
+      // Save to Supabase
+      const { error } = await userUtils.updatePreferences(user.id, preferenceTags)
+      
+      if (error) {
+        console.error('Error saving preferences:', error)
+        alert('Error saving preferences. Please try again.')
+        return
+      }
+
+      // Redirect to dashboard
+      window.location.href = "/dashboard"
+    } catch (error) {
+      console.error('Error saving preferences:', error)
+      alert('Error saving preferences. Please try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const canProceed = () => {
@@ -154,6 +182,28 @@ export default function PreferencesPage() {
       default:
         return false
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Redirecting to login...</p>
+        </div>
+      </div>
+    )
   }
 
   const renderStep = () => {
@@ -526,8 +576,12 @@ export default function PreferencesPage() {
                 Next
               </Button>
             ) : (
-              <Button onClick={handleSavePreferences} className="bg-green-600 hover:bg-green-700">
-                Complete Setup
+              <Button 
+                onClick={handleSavePreferences} 
+                className="bg-green-600 hover:bg-green-700"
+                disabled={saving}
+              >
+                {saving ? "Saving..." : "Complete Setup"}
               </Button>
             )}
           </div>

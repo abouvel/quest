@@ -6,7 +6,9 @@ CREATE TABLE users (
   id UUID PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
   username TEXT UNIQUE,
   streak_count INT DEFAULT 0,
-  preference_tags JSONB DEFAULT '{}' -- e.g. {"food": 1.0, "loud": -1.0}
+  daily_completed_date DATE,   -- tracks the last date user completed a quest
+  preference_tags JSONB DEFAULT '{}', -- e.g. {"food": 1.0, "loud": -1.0}
+  friends UUID[] DEFAULT '{}'  -- array of friend user IDs
 );
 
 -- 2. Quests Table

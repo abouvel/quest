@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Home, MapPin, Trophy, Calendar, User, Settings, LogOut } from "lucide-react"
+import { Home, MapPin, Trophy, Calendar, User, Settings, LogOut, Users } from "lucide-react"
 
 export default function Navigation() {
   const pathname = usePathname()
@@ -16,6 +16,7 @@ export default function Navigation() {
     { href: "/dashboard", label: "Feed", icon: Home },
     { href: "/quest", label: "Quest", icon: Calendar },
     { href: "/map", label: "Map", icon: MapPin },
+    { href: "/friends", label: "Friends", icon: Users },
     { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   ]
 

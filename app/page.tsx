@@ -37,8 +37,10 @@ export default function LandingPage() {
     if (!user) return;
     
     try {
-      const { data: preferences } = await profileUtils.getPreferences(user.id)
-      setHasCompletedPreferences(!!preferences)
+      const { data: userData } = await profileUtils.getProfile(user.id)
+      // Check if user has preference_tags set (not empty object)
+      const hasPrefs = userData && userData.preference_tags && Object.keys(userData.preference_tags).length > 0
+      setHasCompletedPreferences(hasPrefs)
     } catch (error) {
       console.error('Error checking preferences:', error)
       setHasCompletedPreferences(false)
@@ -52,6 +54,13 @@ export default function LandingPage() {
     const { error } = await signIn(email, password)
     if (error) {
       setAuthError(error)
+    } else {
+      // Redirect to appropriate page after successful login
+      if (hasCompletedPreferences) {
+        window.location.href = "/dashboard"
+      } else {
+        window.location.href = "/preferences"
+      }
     }
   }
 
@@ -62,69 +71,10 @@ export default function LandingPage() {
     const { error } = await signUp(email, password, username)
     if (error) {
       setAuthError(error)
+    } else {
+      // Redirect to preferences after successful signup
+      window.location.href = "/preferences"
     }
-  }
-
-  if (isAuthenticated) {
-    if (!hasCompletedPreferences) {
-      if (mounted) {
-        window.location.href = "/preferences"
-      }
-      return null
-    }
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50">
-        <div className="container mx-auto px-4 py-8">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">Welcome to QuestMap!</h1>
-            <p className="text-xl text-gray-600 mb-8">Your daily adventure awaits</p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-              <Link href="/dashboard">
-                <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                  <CardHeader className="text-center">
-                    <Calendar className="w-8 h-8 mx-auto mb-2 text-blue-600" />
-                    <CardTitle>Daily Feed</CardTitle>
-                    <CardDescription>See what your friends are up to</CardDescription>
-                  </CardHeader>
-                </Card>
-              </Link>
-
-              <Link href="/quest">
-                <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                  <CardHeader className="text-center">
-                    <MapPin className="w-8 h-8 mx-auto mb-2 text-green-600" />
-                    <CardTitle>Today's Quest</CardTitle>
-                    <CardDescription>Discover your daily adventure</CardDescription>
-                  </CardHeader>
-                </Card>
-              </Link>
-
-              <Link href="/map">
-                <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                  <CardHeader className="text-center">
-                    <MapPin className="w-8 h-8 mx-auto mb-2 text-red-600" />
-                    <CardTitle>Interactive Map</CardTitle>
-                    <CardDescription>Explore where friends have been</CardDescription>
-                  </CardHeader>
-                </Card>
-              </Link>
-
-              <Link href="/leaderboard">
-                <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                  <CardHeader className="text-center">
-                    <Trophy className="w-8 h-8 mx-auto mb-2 text-yellow-600" />
-                    <CardTitle>Leaderboard</CardTitle>
-                    <CardDescription>See who's on the longest streak</CardDescription>
-                  </CardHeader>
-                </Card>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
   }
 
   // Show loading state until mounted to prevent hydration issues
