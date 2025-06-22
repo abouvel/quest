@@ -13,7 +13,6 @@ import Navigation from "@/components/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { questUtils, profileUtils } from "@/lib/supabaseUtils"
 import { supabase } from "@/lib/supabaseClient"
-import { UserService } from "@/lib/userService"
 import { globalQuestStore } from "@/lib/globalQuestStore"
 
 interface DailyQuest {
@@ -474,16 +473,24 @@ export default function QuestPage() {
 
   const resetLocation = async () => {
     if (!user) return
-    
+
     try {
       console.log('Resetting location for user:', user.id)
-      const success = await UserService.resetUserLocation(user.id)
-      if (success) {
-        console.log('Location reset successful, refreshing...')
-        hasGeneratedThisSession.current = false
-        await fetchUserLocation()
-        await fetchQuest()
+      const { error } = await supabase
+        .from('users')
+        .update({
+          location_description: null,
+          preference_tags: {}
+        })
+        .eq('id', user.id)
+
+      if (error) {
+        throw error
       }
+      
+      console.log('Location reset successful, refreshing...')
+      window.location.reload()
+
     } catch (error) {
       console.error('Error resetting location:', error)
     }

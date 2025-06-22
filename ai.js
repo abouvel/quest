@@ -23,6 +23,7 @@ export async function generateQuest(user, completedTitles = []) {
     const completedTitles = completedQuests.map(quest => quest.title);
     const incompleteTitles = incompleteQuests.map(quest => quest.title);
     questTitles = [...completedTitles, ...incompleteTitles];
+    console.log("-------------questTitles", questTitles);
 
     console.log('Using quest titles from global store - Completed:', completedTitles.length, 'Incomplete:', incompleteTitles.length);
   } catch (error) {
