@@ -8,6 +8,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Heart, MessageCircle, MapPin, Clock, Flame } from "lucide-react"
 import Navigation from "@/components/navigation"
+import { useAuth } from "@/hooks/useAuth"
+import { postUtils } from "@/lib/supabaseUtils"
 
 interface QuestPost {
   id: string
@@ -23,10 +25,53 @@ interface QuestPost {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth()
   const [posts, setPosts] = useState<QuestPost[]>([])
   const [newComment, setNewComment] = useState<{ [key: string]: string }>({})
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    fetchPosts()
+  }, [])
+
+  const fetchPosts = async () => {
+    try {
+      setLoading(true)
+      // Try to fetch from Supabase first
+      const { data: supabasePosts, error } = await postUtils.getPosts(20)
+      
+      if (error) {
+        console.log('Supabase error, using mock data:', error)
+        // Fallback to mock data if Supabase fails
+        loadMockData()
+      } else if (supabasePosts && supabasePosts.length > 0) {
+        // Transform Supabase data to match our interface
+        const transformedPosts = supabasePosts.map((post: any) => ({
+          id: post.id,
+          username: post.profiles?.username || 'anonymous',
+          questName: post.title || 'Quest',
+          description: post.description || '',
+          location: post.location || 'Unknown location',
+          completedAt: new Date(post.created_at).toLocaleString(),
+          image: post.image_url || "/placeholder.svg?height=300&width=400",
+          likes: post.likes_count || 0,
+          comments: post.comments || [],
+          streak: post.streak || 1,
+        }))
+        setPosts(transformedPosts)
+      } else {
+        // No posts in database, use mock data
+        loadMockData()
+      }
+    } catch (error) {
+      console.error('Error fetching posts:', error)
+      loadMockData()
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadMockData = () => {
     // Mock data for the feed
     const mockPosts: QuestPost[] = [
       {
@@ -70,18 +115,55 @@ export default function Dashboard() {
       },
     ]
     setPosts(mockPosts)
-  }, [])
-
-  const handleLike = (postId: string) => {
-    setPosts(posts.map((post) => (post.id === postId ? { ...post, likes: post.likes + 1 } : post)))
   }
 
-  const handleComment = (postId: string) => {
+  const handleLike = async (postId: string) => {
+    if (!user) return
+
+    try {
+      // Try to like in Supabase
+      await postUtils.likePost(postId, user.id)
+      // Update local state
+      setPosts(posts.map((post) => (post.id === postId ? { ...post, likes: post.likes + 1 } : post)))
+    } catch (error) {
+      console.error('Error liking post:', error)
+      // Fallback to local state update
+      setPosts(posts.map((post) => (post.id === postId ? { ...post, likes: post.likes + 1 } : post)))
+    }
+  }
+
+  const handleComment = async (postId: string) => {
+    if (!user) return
+    
     const comment = newComment[postId]
     if (!comment?.trim()) return
 
-    setPosts(posts.map((post) => (post.id === postId ? { ...post, comments: [...post.comments, comment] } : post)))
-    setNewComment({ ...newComment, [postId]: "" })
+    try {
+      // Try to add comment to Supabase
+      await postUtils.addComment(postId, user.id, comment)
+      // Update local state
+      setPosts(posts.map((post) => (post.id === postId ? { ...post, comments: [...post.comments, comment] } : post)))
+      setNewComment({ ...newComment, [postId]: "" })
+    } catch (error) {
+      console.error('Error adding comment:', error)
+      // Fallback to local state update
+      setPosts(posts.map((post) => (post.id === postId ? { ...post, comments: [...post.comments, comment] } : post)))
+      setNewComment({ ...newComment, [postId]: "" })
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading quest feed...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

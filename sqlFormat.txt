@@ -1,0 +1,31 @@
+-- Quest App SQL Schema
+-- Designed for a personalized, AI-generated quest experience
+
+-- 1. Users Table
+CREATE TABLE users (
+  id UUID PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
+  username TEXT UNIQUE,
+  streak_count INT DEFAULT 0,
+  preference_tags JSONB DEFAULT '{}' -- e.g. {"food": 1.0, "loud": -1.0}
+);
+
+-- 2. Quests Table
+CREATE TABLE quests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+
+  description TEXT NOT NULL,
+  tags TEXT[],                 -- e.g. ['solo', 'nature']
+  lat DOUBLE PRECISION,
+  lng DOUBLE PRECISION,
+
+  assigned_at TIMESTAMP DEFAULT now(),
+  expires_at TIMESTAMP,        -- quest expiration time
+  completed_at TIMESTAMP,      -- if completed
+  status TEXT DEFAULT 'active', -- ENUM: 'active', 'completed', 'expired', 'skipped'
+
+  liked BOOLEAN,
+  feedback_tags TEXT[],        -- e.g. ['fun', 'long']
+  feedback_text TEXT,
+  elo_score INT DEFAULT 1400   -- for internal ranking
+);

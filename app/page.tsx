@@ -10,43 +10,63 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MapPin, Trophy, Users, Calendar } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from "@/hooks/useAuth"
+import { profileUtils } from "@/lib/supabaseUtils"
 
 export default function LandingPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const { user, loading, signIn, signUp, isAuthenticated } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [username, setUsername] = useState("")
   const [mounted, setMounted] = useState(false)
+  const [authError, setAuthError] = useState("")
+  const [hasCompletedPreferences, setHasCompletedPreferences] = useState(false)
 
-  // Check if user is already authenticated
   useEffect(() => {
     setMounted(true)
-    const user = localStorage.getItem("currentUser")
-    if (user) {
-      setIsAuthenticated(true)
-    }
   }, [])
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Mock authentication
-    const userData = { email, username: email.split("@")[0], hasCompletedPreferences: false }
-    localStorage.setItem("currentUser", JSON.stringify(userData))
-    setIsAuthenticated(true)
+  useEffect(() => {
+    if (user && mounted) {
+      // Check if user has completed preferences
+      checkUserPreferences()
+    }
+  }, [user, mounted])
+
+  const checkUserPreferences = async () => {
+    if (!user) return;
+    
+    try {
+      const { data: preferences } = await profileUtils.getPreferences(user.id)
+      setHasCompletedPreferences(!!preferences)
+    } catch (error) {
+      console.error('Error checking preferences:', error)
+      setHasCompletedPreferences(false)
+    }
   }
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Mock authentication
-    const userData = { email, username, hasCompletedPreferences: false }
-    localStorage.setItem("currentUser", JSON.stringify(userData))
-    setIsAuthenticated(true)
+    setAuthError("")
+    
+    const { error } = await signIn(email, password)
+    if (error) {
+      setAuthError(error)
+    }
+  }
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAuthError("")
+    
+    const { error } = await signUp(email, password, username)
+    if (error) {
+      setAuthError(error)
+    }
   }
 
   if (isAuthenticated) {
-    const currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}")
-
-    if (!currentUser.hasCompletedPreferences) {
+    if (!hasCompletedPreferences) {
       if (mounted) {
         window.location.href = "/preferences"
       }
@@ -108,7 +128,7 @@ export default function LandingPage() {
   }
 
   // Show loading state until mounted to prevent hydration issues
-  if (!mounted) {
+  if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
@@ -160,6 +180,11 @@ export default function LandingPage() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleLogin} className="space-y-4">
+                    {authError && (
+                      <div className="text-red-600 text-sm bg-red-50 p-2 rounded">
+                        {authError}
+                      </div>
+                    )}
                     <div>
                       <Label htmlFor="email">Email</Label>
                       <Input
@@ -180,8 +205,8 @@ export default function LandingPage() {
                         required
                       />
                     </div>
-                    <Button type="submit" className="w-full">
-                      Login
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      {loading ? "Logging in..." : "Login"}
                     </Button>
                   </form>
                 </CardContent>
@@ -196,6 +221,11 @@ export default function LandingPage() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSignup} className="space-y-4">
+                    {authError && (
+                      <div className="text-red-600 text-sm bg-red-50 p-2 rounded">
+                        {authError}
+                      </div>
+                    )}
                     <div>
                       <Label htmlFor="username">Username</Label>
                       <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
@@ -220,8 +250,8 @@ export default function LandingPage() {
                         required
                       />
                     </div>
-                    <Button type="submit" className="w-full">
-                      Sign Up
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      {loading ? "Creating account..." : "Sign Up"}
                     </Button>
                   </form>
                 </CardContent>
