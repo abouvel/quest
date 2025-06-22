@@ -7,10 +7,10 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { MapPin, Clock, Star, CheckCircle, Camera, X, Plus } from "lucide-react"
+import { MapPin, Clock, Star, CheckCircle, Camera, Bug, X, Plus } from "lucide-react"
 import Navigation from "@/components/navigation"
 import { useAuth } from "@/hooks/useAuth"
-import { userUtils, questUtils } from "@/lib/supabaseUtils"
+import { questUtils, profileUtils } from "@/lib/supabaseUtils"
 
 interface DailyQuest {
   id: string
@@ -52,31 +52,39 @@ export default function QuestPage() {
   const [isCompleting, setIsCompleting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showDebug, setShowDebug] = useState(false)
+  const [showCompletionForm, setShowCompletionForm] = useState(false)
+  const [completionData, setCompletionData] = useState<QuestCompletion>({
+    lat: null,
+    lng: null,
+    liked: false,
+    feedback_tags: [],
+    feedback_text: ""
+  })
+  const [newFeedbackTag, setNewFeedbackTag] = useState("")
 
   useEffect(() => {
-    fetchQuest()
+    if (!authLoading && isAuthenticated && user) {
+      fetchQuest()
+    }
     setupCountdown()
-  }, [])
+  }, [authLoading, isAuthenticated, user])
 
   const fetchQuest = async () => {
+    if (!user) return
+    
     try {
       setIsLoading(true)
-      console.log('Fetching quest...')
-      
-      // For now, use a hardcoded user ID - you can get this from auth later
-      const userId = '99ba348a-eee4-4d23-9982-fa943c9d0826' // Replace with actual user ID
-      console.log('Using userId:', userId)
+      console.log('Fetching quest for user:', user.id)
       
       const response = await fetch('/api/generate-quest', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ userId: user.id }),
       })
 
       console.log('Response status:', response.status)
-      console.log('Response ok:', response.ok)
 
       if (!response.ok) {
         throw new Error('Failed to fetch quest')
@@ -146,11 +154,15 @@ export default function QuestPage() {
     return () => clearInterval(interval)
   }
 
+  const handleCompleteQuest = async () => {
+    if (!user || !todayQuest) return
+    
     setIsCompleting(true)
     try {
       // Save quest completion to Supabase
       const questData = {
         user_id: user.id,
+        title: todayQuest.title,
         description: todayQuest.description,
         tags: [todayQuest.category.toLowerCase()],
         lat: completionData.lat,
@@ -172,20 +184,16 @@ export default function QuestPage() {
         return
       }
 
-      // Update user streak and daily completion date
+      // Update user streak
       try {
-        const { data: userData } = await userUtils.getUser(user.id)
+        const { data: userData } = await profileUtils.getProfile(user.id)
         const currentStreak = userData?.streak_count || 0
         const today = new Date().toISOString().split('T')[0]
         
-        // Update both streak and daily completion date
-        await userUtils.updateUser(user.id, {
+        await profileUtils.updateProfile(user.id, {
           streak_count: currentStreak + 1,
           daily_completed_date: today
         })
-        
-        // Update local state
-        setDailyCompleted(true)
       } catch (error) {
         console.error('Error updating user data:', error)
       }
@@ -241,6 +249,33 @@ export default function QuestPage() {
     }
   }
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center">
+            <p className="text-gray-600">Please sign in to view your quests</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -292,17 +327,6 @@ export default function QuestPage() {
                   <CardDescription>Your personalized daily adventure</CardDescription>
                 </div>
                 <div className="flex items-center space-x-2">
-                  {todayQuest.debug && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowDebug(!showDebug)}
-                      className="flex items-center space-x-1"
-                    >
-                      <Bug className="w-4 h-4" />
-                      <span>Debug</span>
-                    </Button>
-                  )}
                   {todayQuest.completed && (
                     <Badge className="bg-green-100 text-green-800">
                       <CheckCircle className="w-4 h-4 mr-1" />
@@ -314,28 +338,6 @@ export default function QuestPage() {
             </CardHeader>
 
             <CardContent className="space-y-6">
-              {/* Debug Information */}
-              {showDebug && todayQuest.debug && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-yellow-800 mb-2 flex items-center">
-                    <Bug className="w-4 h-4 mr-1" />
-                    Debug Information
-                  </h4>
-                  <div className="text-sm text-yellow-700 space-y-1">
-                    <div><b>User Location:</b> {todayQuest.debug.userLocation}</div>
-                    <div><b>User Interests:</b> {todayQuest.debug.userInterests?.join(", ")}</div>
-                    <div><b>User Preference:</b> {todayQuest.debug.userPreference}</div>
-                    <div><b>Completed Titles:</b> {todayQuest.debug.completedTitles?.join(", ") || "None"}</div>
-                    <div className="mt-2">
-                      <b>Prompt:</b>
-                      <pre className="whitespace-pre-wrap text-xs mt-1 bg-yellow-100 p-2 rounded">
-                        {todayQuest.debug.prompt}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <div>
                 <h3 className="text-xl font-semibold mb-3">{todayQuest.title}</h3>
                 <p className="text-gray-700 mb-4">{todayQuest.description}</p>
@@ -361,169 +363,27 @@ export default function QuestPage() {
                 </div>
               </div>
 
-              {!dailyCompleted ? (
+              {!todayQuest.completed ? (
                 <div className="space-y-4">
-                  {!showCompletionForm ? (
-                    <Button 
-                      onClick={() => setShowCompletionForm(true)} 
-                      className="w-full" 
-                      size="lg"
-                    >
-                      <Camera className="w-4 h-4 mr-2" />
-                      Complete Quest & Share
-                    </Button>
-                  ) : (
-                    <div className="space-y-6">
-                      <div className="border rounded-lg p-4 bg-gray-50">
-                        <h4 className="font-semibold mb-4">Quest Completion Details</h4>
-                        
-                        {/* Location Coordinates */}
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                          <div>
-                            <Label htmlFor="lat">Latitude</Label>
-                            <Input
-                              id="lat"
-                              type="number"
-                              step="any"
-                              placeholder="e.g., 40.7128"
-                              value={completionData.lat || ""}
-                              onChange={(e) => setCompletionData(prev => ({ 
-                                ...prev, 
-                                lat: e.target.value ? parseFloat(e.target.value) : null 
-                              }))}
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="lng">Longitude</Label>
-                            <Input
-                              id="lng"
-                              type="number"
-                              step="any"
-                              placeholder="e.g., -74.0060"
-                              value={completionData.lng || ""}
-                              onChange={(e) => setCompletionData(prev => ({ 
-                                ...prev, 
-                                lng: e.target.value ? parseFloat(e.target.value) : null 
-                              }))}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Like/Dislike */}
-                        <div className="mb-4">
-                          <Label className="block mb-2">Did you enjoy this quest?</Label>
-                          <div className="flex space-x-4">
-                            <Button
-                              variant={completionData.liked ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setCompletionData(prev => ({ ...prev, liked: true }))}
-                            >
-                              👍 Yes
-                            </Button>
-                            <Button
-                              variant={!completionData.liked ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setCompletionData(prev => ({ ...prev, liked: false }))}
-                            >
-                              👎 No
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Feedback Tags */}
-                        <div className="mb-4">
-                          <Label className="block mb-2">What was this quest like? (Select all that apply)</Label>
-                          <div className="flex flex-wrap gap-2 mb-2">
-                            {completionData.feedback_tags.map(tag => (
-                              <Badge key={tag} variant="secondary" className="flex items-center gap-1">
-                                {tag}
-                                <X 
-                                  className="w-3 h-3 cursor-pointer" 
-                                  onClick={() => removeFeedbackTag(tag)}
-                                />
-                              </Badge>
-                            ))}
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {feedbackTagOptions.map(tag => (
-                              <Button
-                                key={tag}
-                                variant={completionData.feedback_tags.includes(tag) ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => handleFeedbackTagToggle(tag)}
-                                disabled={completionData.feedback_tags.includes(tag)}
-                              >
-                                {tag}
-                              </Button>
-                            ))}
-                          </div>
-                          <div className="flex gap-2 mt-2">
-                            <Input
-                              placeholder="Add custom tag..."
-                              value={newFeedbackTag}
-                              onChange={(e) => setNewFeedbackTag(e.target.value)}
-                              onKeyPress={(e) => e.key === "Enter" && addCustomFeedbackTag()}
-                            />
-                            <Button size="sm" onClick={addCustomFeedbackTag}>
-                              <Plus className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Feedback Text */}
-                        <div className="mb-4">
-                          <Label htmlFor="feedback">Additional comments (optional)</Label>
-                          <Textarea
-                            id="feedback"
-                            placeholder="Tell us more about your experience..."
-                            value={completionData.feedback_text}
-                            onChange={(e) => setCompletionData(prev => ({ 
-                              ...prev, 
-                              feedback_text: e.target.value 
-                            }))}
-                            rows={3}
-                          />
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-2">
-                          <Button 
-                            onClick={handleCompleteQuest} 
-                            disabled={isCompleting}
-                            className="flex-1"
-                          >
-                            {isCompleting ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                Completing...
-                              </>
-                            ) : (
-                              "Complete Quest"
-                            )}
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            onClick={() => setShowCompletionForm(false)}
-                            disabled={isCompleting}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  <Button 
+                    onClick={() => setShowCompletionForm(true)} 
+                    className="w-full" 
+                    size="lg"
+                  >
+                    <Camera className="w-4 h-4 mr-2" />
+                    Complete Quest & Share
+                  </Button>
 
                   <p className="text-sm text-gray-500 text-center">
-                    Complete your quest and share your experience to earn points and maintain your streak!
+                    Complete your quest and share a photo to earn points and maintain your streak!
                   </p>
                 </div>
               ) : (
                 <div className="text-center space-y-4">
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                     <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                    <h4 className="font-semibold text-green-800">Daily Quest Completed!</h4>
+                    <h4 className="font-semibold text-green-800">Quest Completed!</h4>
                     <p className="text-green-700">You earned {todayQuest.points} points and maintained your streak!</p>
-                    <p className="text-sm text-green-600 mt-2">Come back tomorrow for a new adventure!</p>
                   </div>
 
                   <Button variant="outline" className="w-full">
@@ -533,6 +393,138 @@ export default function QuestPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Quest Completion Form */}
+          {showCompletionForm && !todayQuest.completed && (
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle>Complete Your Quest</CardTitle>
+                <CardDescription>Share your experience and earn points</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Location */}
+                <div className="space-y-2">
+                  <Label>Location (optional)</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="number"
+                      placeholder="Latitude"
+                      value={completionData.lat || ''}
+                      onChange={(e) => setCompletionData(prev => ({ ...prev, lat: e.target.value ? parseFloat(e.target.value) : null }))}
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Longitude"
+                      value={completionData.lng || ''}
+                      onChange={(e) => setCompletionData(prev => ({ ...prev, lng: e.target.value ? parseFloat(e.target.value) : null }))}
+                    />
+                  </div>
+                </div>
+
+                {/* Liked */}
+                <div className="space-y-2">
+                  <Label>Did you enjoy this quest?</Label>
+                  <div className="flex space-x-2">
+                    <Button
+                      variant={completionData.liked ? "default" : "outline"}
+                      onClick={() => setCompletionData(prev => ({ ...prev, liked: true }))}
+                    >
+                      👍 Yes
+                    </Button>
+                    <Button
+                      variant={!completionData.liked ? "default" : "outline"}
+                      onClick={() => setCompletionData(prev => ({ ...prev, liked: false }))}
+                    >
+                      👎 No
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Feedback Tags */}
+                <div className="space-y-2">
+                  <Label>How would you describe this quest?</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {feedbackTagOptions.map((tag) => (
+                      <Button
+                        key={tag}
+                        variant={completionData.feedback_tags.includes(tag) ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handleFeedbackTagToggle(tag)}
+                      >
+                        {tag}
+                      </Button>
+                    ))}
+                  </div>
+                  
+                  {/* Custom tag */}
+                  <div className="flex space-x-2">
+                    <Input
+                      placeholder="Add custom tag"
+                      value={newFeedbackTag}
+                      onChange={(e) => setNewFeedbackTag(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && addCustomFeedbackTag()}
+                    />
+                    <Button onClick={addCustomFeedbackTag} size="sm">
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  
+                  {/* Selected tags */}
+                  {completionData.feedback_tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {completionData.feedback_tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="flex items-center space-x-1">
+                          <span>{tag}</span>
+                          <X 
+                            className="w-3 h-3 cursor-pointer" 
+                            onClick={() => removeFeedbackTag(tag)}
+                          />
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Additional Feedback */}
+                <div className="space-y-2">
+                  <Label>Additional comments (optional)</Label>
+                  <Textarea
+                    placeholder="Share your experience..."
+                    value={completionData.feedback_text}
+                    onChange={(e) => setCompletionData(prev => ({ ...prev, feedback_text: e.target.value }))}
+                    rows={3}
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex space-x-2">
+                  <Button 
+                    onClick={handleCompleteQuest} 
+                    disabled={isCompleting} 
+                    className="flex-1"
+                  >
+                    {isCompleting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Completing...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Complete Quest
+                      </>
+                    )}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowCompletionForm(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Quest Tips */}
           <Card>
@@ -545,7 +537,6 @@ export default function QuestPage() {
                 <li>• Check in at the location to verify completion</li>
                 <li>• Complete quests daily to maintain your streak</li>
                 <li>• Explore different categories to discover new interests</li>
-                <li>• Provide detailed feedback to help improve future quests</li>
               </ul>
             </CardContent>
           </Card>
