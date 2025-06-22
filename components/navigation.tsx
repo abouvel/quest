@@ -15,7 +15,6 @@ export default function Navigation() {
   const { user, isAuthenticated } = useAuth()
 
   const navItems = [
-    { href: "/dashboard", label: "Feed", icon: Home },
     { href: "/quest", label: "Quest", icon: Calendar },
     { href: "/map", label: "Map", icon: MapPin },
     { href: "/friends", label: "Friends", icon: Users },
@@ -57,77 +56,77 @@ export default function Navigation() {
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link href="/dashboard" className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <MapPin className="w-5 h-5 text-white" />
+          {/* Left side: Logo and Navigation */}
+          <div className="flex items-center space-x-4">
+            {/* Logo */}
+            <Link href="/dashboard" className="flex items-center">
+              <span className="text-xl font-bold text-gray-900">EXPLR</span>
+            </Link>
+
+            {/* Navigation Links */}
+            <div className="hidden md:flex items-center space-x-1">
+              {navItems.map((item) => {
+                const isActive = pathname === item.href
+
+                return (
+                  <Link key={item.href} href={item.href}>
+                    <Button variant={isActive ? "default" : "ghost"} className="flex items-center space-x-2">
+                      <span>{item.label}</span>
+                    </Button>
+                  </Link>
+                )
+              })}
             </div>
-            <span className="text-xl font-bold text-gray-900">QuestMap</span>
-          </Link>
-
-          {/* Simulate New Day Button */}
-          {isAuthenticated && (
-            <Button 
-              onClick={simulateNewDay}
-              variant="outline"
-              size="sm"
-              className="border-yellow-300 text-yellow-700 hover:bg-yellow-100"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              New Day
-            </Button>
-          )}
-
-          {/* Navigation Links */}
-          <div className="hidden md:flex items-center space-x-1">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.href
-
-              return (
-                <Link key={item.href} href={item.href}>
-                  <Button variant={isActive ? "default" : "ghost"} className="flex items-center space-x-2">
-                    <Icon className="w-4 h-4" />
-                    <span>{item.label}</span>
-                  </Button>
-                </Link>
-              )
-            })}
           </div>
 
-          {/* User Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center space-x-2 p-2">
-                <Avatar className="w-8 h-8">
-                  <AvatarImage src="/placeholder.svg" />
-                  <AvatarFallback>{(user?.user_metadata?.username || user?.email?.[0] || 'U').toUpperCase()}</AvatarFallback>
-                </Avatar>
-                <span className="hidden md:block">{user?.user_metadata?.username || user?.email?.split('@')[0] || 'User'}</span>
+          {/* Right side: New Day Button and User Menu */}
+          <div className="flex items-center space-x-2">
+            {/* Simulate New Day Button */}
+            {isAuthenticated && (
+              <Button 
+                onClick={simulateNewDay}
+                variant="outline"
+                size="sm"
+                className="border-yellow-300 text-yellow-700 hover:bg-yellow-100"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                New Day
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem>
-                <User className="w-4 h-4 mr-2" />
-                Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Settings className="w-4 h-4 mr-2" />
-                Settings
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleLogout}>
-                <LogOut className="w-4 h-4 mr-2" />
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            )}
+
+            {/* User Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center space-x-2 p-2">
+                  <Avatar className="w-8 h-8">
+                    <AvatarImage src="/placeholder.svg" />
+                    <AvatarFallback>{(user?.user_metadata?.username || user?.email?.[0] || 'U').toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <span className="hidden md:block">{user?.user_metadata?.username || user?.email?.split('@')[0] || 'User'}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem>
+                  <User className="w-4 h-4 mr-2" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Settings className="w-4 h-4 mr-2" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Mobile Navigation */}
         <div className="md:hidden border-t border-gray-200">
           <div className="flex items-center justify-around py-2">
             {navItems.map((item) => {
-              const Icon = item.icon
               const isActive = pathname === item.href
 
               return (
@@ -139,7 +138,6 @@ export default function Navigation() {
                       isActive ? "text-blue-600" : "text-gray-600"
                     }`}
                   >
-                    <Icon className="w-4 h-4" />
                     <span className="text-xs">{item.label}</span>
                   </Button>
                 </Link>

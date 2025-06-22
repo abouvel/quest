@@ -184,8 +184,8 @@ export default function LeaderboardPage() {
                     key={entry.id}
                     className={`text-center ${index === 0 ? "md:order-2 ring-2 ring-yellow-400" : index === 1 ? "md:order-1" : "md:order-3"}`}
                   >
-                    <CardContent className="pt-6">
-                      <div className="flex justify-center mb-4">{getRankIcon(index)}</div>
+                    <CardContent className="pt-8 pb-6">
+                      <div className="flex justify-center mb-6">{getRankIcon(index)}</div>
                       <Avatar className="w-16 h-16 mx-auto mb-4">
                         <AvatarImage src={"/placeholder.svg"} />
                         <AvatarFallback>{entry.username[0].toUpperCase()}</AvatarFallback>
@@ -214,7 +214,7 @@ export default function LeaderboardPage() {
               </div>
               {/* Full Leaderboard List */}
               <Card>
-                <CardContent>
+                <CardContent className="pt-6">
                   <div className="space-y-3">
                     {leaderboardData.map((entry, index) => (
                       <div
@@ -224,7 +224,7 @@ export default function LeaderboardPage() {
                         }`}
                       >
                         <div className="flex items-center space-x-4">
-                          <div className="flex items-center justify-center w-8">{getRankIcon(index)}</div>
+                          <div className="flex items-center justify-center w-10 h-10">{getRankIcon(index)}</div>
                           <Avatar className="w-10 h-10">
                             <AvatarImage src={"/placeholder.svg"} />
                             <AvatarFallback>{entry.username[0].toUpperCase()}</AvatarFallback>
@@ -260,24 +260,24 @@ export default function LeaderboardPage() {
                 return currentUser ? (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
                     <Card>
-                      <CardContent className="text-center">
-                        <Flame className="w-8 h-8 text-red-500 mx-auto mb-2" />
+                      <CardContent className="text-center pt-6">
+                        <Flame className="w-8 h-8 text-red-500 mx-auto mb-3" />
                         <h3 className="font-semibold text-lg">Your Streak</h3>
                         <p className="text-2xl font-bold text-red-600">{currentUser.streak} days</p>
                         <p className="text-sm text-gray-600">Keep it up!</p>
                       </CardContent>
                     </Card>
                     <Card>
-                      <CardContent className="text-center">
-                        <Trophy className="w-8 h-8 text-yellow-500 mx-auto mb-2" />
+                      <CardContent className="text-center pt-6">
+                        <Trophy className="w-8 h-8 text-yellow-500 mx-auto mb-3" />
                         <h3 className="font-semibold text-lg">Your Rank</h3>
                         <p className="text-2xl font-bold text-yellow-600">#{leaderboardData.indexOf(currentUser) + 1}</p>
                         <p className="text-sm text-gray-600">Out of {leaderboardData.length} users</p>
                       </CardContent>
                     </Card>
                     <Card>
-                      <CardContent className="text-center">
-                        <Star className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                      <CardContent className="text-center pt-6">
+                        <Star className="w-8 h-8 text-blue-500 mx-auto mb-3" />
                         <h3 className="font-semibold text-lg">Total Points</h3>
                         <p className="text-2xl font-bold text-blue-600">{currentUser.questCount * 150}</p>
                         <p className="text-sm text-gray-600">All time</p>

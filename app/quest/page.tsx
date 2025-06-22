@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { MapPin, Clock, Star, CheckCircle, Camera, Bug, X, Plus, Calendar } from "lucide-react"
 import Navigation from "@/components/navigation"
 import { useAuth } from "@/hooks/useAuth"
@@ -35,8 +36,6 @@ interface DailyQuest {
 }
 
 interface QuestCompletion {
-  lat: number | null
-  lng: number | null
   liked: boolean
   feedback_tags: string[]
   feedback_text: string
@@ -57,11 +56,7 @@ export default function QuestPage() {
   const [showDebug, setShowDebug] = useState(false)
   const [showCompletionForm, setShowCompletionForm] = useState(false)
   const [userLocation, setUserLocation] = useState("your city")
-  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null)
-  const [locationLoading, setLocationLoading] = useState(false)
   const [completionData, setCompletionData] = useState<QuestCompletion>({
-    lat: null,
-    lng: null,
     liked: false,
     feedback_tags: [],
     feedback_text: ""
@@ -142,49 +137,6 @@ export default function QuestPage() {
       console.log('=== END LOCATION FETCH DEBUG ===')
     } catch (error) {
       console.error('Error fetching user location:', error)
-    }
-  }
-
-  const getCurrentLocation = async (): Promise<{lat: number, lng: number} | null> => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        console.log('Geolocation is not supported by this browser')
-        resolve(null)
-        return
-      }
-
-      setLocationLoading(true)
-      
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords
-          console.log('Current location obtained:', { lat: latitude, lng: longitude })
-          setCurrentLocation({ lat: latitude, lng: longitude })
-          setLocationLoading(false)
-          resolve({ lat: latitude, lng: longitude })
-        },
-        (error) => {
-          console.error('Error getting location:', error)
-          setLocationLoading(false)
-          resolve(null)
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 300000 // 5 minutes
-        }
-      )
-    })
-  }
-
-  const handleGetLocation = async () => {
-    const location = await getCurrentLocation()
-    if (location) {
-      setCompletionData(prev => ({
-        ...prev,
-        lat: location.lat,
-        lng: location.lng
-      }))
     }
   }
 
@@ -409,10 +361,6 @@ export default function QuestPage() {
     
     setIsCompleting(true)
     try {
-      // Use only the coordinates that the user has set
-      const finalLat = completionData.lat
-      const finalLng = completionData.lng
-      
       // Convert photo data URL to file
       const photoFile = dataURLtoFile(photoData, `quest-${todayQuest.id}-${Date.now()}.jpg`)
       
@@ -437,8 +385,6 @@ export default function QuestPage() {
       const completionDataToSave = {
         status: 'completed',
         completed_at: new Date().toISOString(),
-        lat: finalLat || null,
-        lng: finalLng || null,
         liked: completionData.liked,
         feedback_tags: completionData.feedback_tags,
         feedback_text: completionData.feedback_text,
@@ -755,61 +701,15 @@ export default function QuestPage() {
             </CardContent>
           </Card>
 
-          {/* Quest Completion Form */}
-          {showCompletionForm && !todayQuest.completed && (
-            <Card className="mb-8">
-              <CardHeader>
-                <CardTitle>Complete Your Quest</CardTitle>
-                <CardDescription>Share your experience and earn points</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Location */}
-                <div className="space-y-2">
-                  <Label className="flex items-center">
-                    <MapPin className="w-4 h-4 mr-2" />
-                    Quest Completion Location
-                  </Label>
-                  <div className="flex space-x-2">
-                    <Button
-                      onClick={handleGetLocation}
-                      variant="outline"
-                      disabled={locationLoading}
-                      className="flex-1"
-                    >
-                      {locationLoading ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-                          Getting Location...
-                        </>
-                      ) : (
-                        <>
-                          <MapPin className="w-4 h-4 mr-2" />
-                          {currentLocation ? 'Update Location' : 'Get Current Location'}
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  {currentLocation && (
-                    <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
-                      ✓ Location obtained: {currentLocation.lat.toFixed(6)}, {currentLocation.lng.toFixed(6)}
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      type="number"
-                      placeholder="Latitude"
-                      value={completionData.lat || ''}
-                      onChange={(e) => setCompletionData(prev => ({ ...prev, lat: e.target.value ? parseFloat(e.target.value) : null }))}
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Longitude"
-                      value={completionData.lng || ''}
-                      onChange={(e) => setCompletionData(prev => ({ ...prev, lng: e.target.value ? parseFloat(e.target.value) : null }))}
-                    />
-                  </div>
-                </div>
-
+          {/* Quest Completion Dialog */}
+          <Dialog open={showCompletionForm} onOpenChange={setShowCompletionForm}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Complete Your Quest</DialogTitle>
+                <DialogDescription>Share your experience and earn points</DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-6">
                 {/* Liked */}
                 <div className="space-y-2">
                   <Label>Did you enjoy this quest?</Label>
@@ -817,66 +717,23 @@ export default function QuestPage() {
                     <Button
                       variant={completionData.liked ? "default" : "outline"}
                       onClick={() => setCompletionData(prev => ({ ...prev, liked: true }))}
+                      className="flex-1"
                     >
-                      👍 Yes
+                      Yes
                     </Button>
                     <Button
                       variant={!completionData.liked ? "default" : "outline"}
                       onClick={() => setCompletionData(prev => ({ ...prev, liked: false }))}
+                      className="flex-1"
                     >
-                      👎 No
+                      No
                     </Button>
                   </div>
                 </div>
 
-                {/* Feedback Tags */}
+                {/* Comments */}
                 <div className="space-y-2">
-                  <Label>How would you describe this quest?</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {feedbackTagOptions.map((tag) => (
-                      <Button
-                        key={tag}
-                        variant={completionData.feedback_tags.includes(tag) ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handleFeedbackTagToggle(tag)}
-                      >
-                        {tag}
-                      </Button>
-                    ))}
-                  </div>
-                  
-                  {/* Custom tag */}
-                  <div className="flex space-x-2">
-                    <Input
-                      placeholder="Add custom tag"
-                      value={newFeedbackTag}
-                      onChange={(e) => setNewFeedbackTag(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && addCustomFeedbackTag()}
-                    />
-                    <Button onClick={addCustomFeedbackTag} size="sm">
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  
-                  {/* Selected tags */}
-                  {completionData.feedback_tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {completionData.feedback_tags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="flex items-center space-x-1">
-                          <span>{tag}</span>
-                          <X 
-                            className="w-3 h-3 cursor-pointer" 
-                            onClick={() => removeFeedbackTag(tag)}
-                          />
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Additional Feedback */}
-                <div className="space-y-2">
-                  <Label>Additional comments (optional)</Label>
+                  <Label>Comments</Label>
                   <Textarea
                     placeholder="Share your experience..."
                     value={completionData.feedback_text}
@@ -889,7 +746,7 @@ export default function QuestPage() {
                 <div className="space-y-2">
                   <Label className="flex items-center">
                     <Camera className="w-4 h-4 mr-2" />
-                    Take a Photo (Required)
+                    Take a Photo
                     <span className="text-red-500 ml-1">*</span>
                   </Label>
                   
@@ -912,7 +769,7 @@ export default function QuestPage() {
                               autoPlay
                               playsInline
                               muted
-                              className="w-full h-64 object-cover rounded-lg border bg-gray-100"
+                              className="w-full h-48 object-cover rounded-lg border bg-gray-100"
                             />
                             <canvas
                               ref={canvasRef}
@@ -948,7 +805,7 @@ export default function QuestPage() {
                         <img
                           src={photoData!}
                           alt="Quest completion photo"
-                          className="w-full h-64 object-cover rounded-lg border"
+                          className="w-full h-48 object-cover rounded-lg border"
                         />
                       </div>
                       <Button 
@@ -989,9 +846,9 @@ export default function QuestPage() {
                     Cancel
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* Quest Tips */}
           <Card>
