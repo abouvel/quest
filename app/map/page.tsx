@@ -523,49 +523,6 @@ export default function MapPage() {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Selected Quest Details */}
-            {selectedQuest && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <MapPin className="w-5 h-5 mr-2" />
-                    Quest Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div>
-                      <h4 className="font-semibold text-sm">{selectedQuest.title}</h4>
-                      <p className="text-sm text-gray-600 mt-1">{selectedQuest.description}</p>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Users className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">{selectedQuest.username}</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">
-                          {selectedQuest.coordinates.lat.toFixed(4)}, {selectedQuest.coordinates.lng.toFixed(4)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <Badge className={getCategoryColor(selectedQuest.category)}>
-                        {selectedQuest.category}
-                      </Badge>
-                      <span className="text-xs text-gray-500 flex items-center">
-                        <Calendar className="w-3 h-3 mr-1" />
-                        {formatTimeAgo(selectedQuest.completedAt)}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
         </div>
       </div>
@@ -579,19 +536,8 @@ export default function MapPage() {
       }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>Quest Details</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setShowQuestDialog(false)
-                  setSelectedQuestImageUrl(null)
-                }}
-                className="h-6 w-6 p-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+            <DialogTitle>
+              Quest Details
             </DialogTitle>
           </DialogHeader>
           
