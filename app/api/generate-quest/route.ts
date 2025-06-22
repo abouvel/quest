@@ -4,16 +4,23 @@ import { UserService } from '../../../lib/userService'
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await request.json()
-    
+
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
 
     // Generate quest using your existing service
     const quest = await UserService.generateUserQuest(userId)
-    
+
     if (!quest) {
       return NextResponse.json({ error: 'Failed to generate quest' }, { status: 500 })
+    }
+
+    // Save the quest to database
+    const saveSuccess = await UserService.saveGeneratedQuest(userId, quest)
+
+    if (!saveSuccess) {
+      return NextResponse.json({ error: 'Failed to save quest to database' }, { status: 500 })
     }
 
     return NextResponse.json({ quest })

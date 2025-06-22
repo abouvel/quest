@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,8 @@ import { MapPin, Clock, Star, CheckCircle, Camera, Bug, X, Plus } from "lucide-r
 import Navigation from "@/components/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { questUtils, profileUtils } from "@/lib/supabaseUtils"
+import { supabase } from "@/lib/supabaseClient"
+import { UserService } from "@/lib/userService"
 
 interface DailyQuest {
   id: string
@@ -53,6 +55,7 @@ export default function QuestPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [showDebug, setShowDebug] = useState(false)
   const [showCompletionForm, setShowCompletionForm] = useState(false)
+  const [userLocation, setUserLocation] = useState("your city")
   const [completionData, setCompletionData] = useState<QuestCompletion>({
     lat: null,
     lng: null,
@@ -61,13 +64,78 @@ export default function QuestPage() {
     feedback_text: ""
   })
   const [newFeedbackTag, setNewFeedbackTag] = useState("")
+  const [photoTaken, setPhotoTaken] = useState(false)
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
+  const [photoData, setPhotoData] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     if (!authLoading && isAuthenticated && user) {
+      fetchUserLocation()
       fetchQuest()
     }
     setupCountdown()
   }, [authLoading, isAuthenticated, user])
+
+  // Cleanup camera when component unmounts or form closes
+  useEffect(() => {
+    return () => {
+      stopCamera()
+    }
+  }, [])
+
+  // Stop camera when form is closed
+  useEffect(() => {
+    if (!showCompletionForm) {
+      stopCamera()
+      setPhotoTaken(false)
+      setPhotoData(null)
+    }
+  }, [showCompletionForm])
+
+  // Ensure video plays when stream is available
+  useEffect(() => {
+    if (cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream
+      videoRef.current.play().catch(error => {
+        console.error('Error playing video:', error)
+      })
+    }
+  }, [cameraStream])
+
+  const fetchUserLocation = async () => {
+    if (!user) return
+    
+    try {
+      console.log('=== LOCATION FETCH DEBUG ===')
+      console.log('Fetching location for user ID:', user.id)
+      
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('location_description, preference_tags')
+        .eq('id', user.id)
+        .single()
+      
+      console.log('Raw user data from DB:', userData)
+      console.log('Database error:', error)
+      
+      if (!error && userData) {
+        // Use location_description if available, otherwise fall back to preference_tags.location
+        const location = userData.location_description || 
+                        userData.preference_tags?.location || 
+                        "your city"
+        console.log('Final location set to:', location)
+        setUserLocation(location)
+      } else {
+        console.log('Using default location: your city')
+        setUserLocation("your city")
+      }
+      console.log('=== END LOCATION FETCH DEBUG ===')
+    } catch (error) {
+      console.error('Error fetching user location:', error)
+    }
+  }
 
   const fetchQuest = async () => {
     if (!user) return
@@ -76,6 +144,53 @@ export default function QuestPage() {
       setIsLoading(true)
       console.log('Fetching quest for user:', user.id)
       
+      // Check if user has a current quest
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('current_quest_id')
+        .eq('id', user.id)
+        .single()
+      
+      if (userError) {
+        console.error('Error fetching user data:', userError)
+      }
+      
+      // If current_quest_id exists, get the quest
+      if (userData?.current_quest_id) {
+        console.log('Found current quest ID:', userData.current_quest_id)
+        
+        const { data: currentQuest, error: questError } = await supabase
+          .from('quests')
+          .select('*')
+          .eq('id', userData.current_quest_id)
+          .single()
+        
+        if (questError) {
+          console.error('Error fetching current quest:', questError)
+        }
+        
+        if (currentQuest) {
+          console.log('Found existing quest:', currentQuest)
+          const quest: DailyQuest = {
+            id: currentQuest.id,
+            title: currentQuest.title,
+            description: currentQuest.description,
+            location: userLocation,
+            category: currentQuest.tags?.[0] || "Adventure",
+            difficulty: "Medium",
+            estimatedTime: "1-2 hours",
+            points: 150,
+            completed: currentQuest.status === 'completed',
+          }
+          
+          console.log('Using existing quest:', quest)
+          setTodayQuest(quest)
+          return
+        }
+      }
+      
+      // If current_quest_id is null or quest not found, generate new one with API
+      console.log('No current quest found, generating new quest via API')
       const response = await fetch('/api/generate-quest', {
         method: 'POST',
         headers: {
@@ -84,21 +199,54 @@ export default function QuestPage() {
         body: JSON.stringify({ userId: user.id }),
       })
 
-      console.log('Response status:', response.status)
-
       if (!response.ok) {
         throw new Error('Failed to fetch quest')
       }
 
       const data = await response.json()
-      console.log('Response data:', data)
+      console.log('Generated quest data:', data)
       
-      // Transform the API response to match your interface
+      // Get the newly created quest from database
+      const { data: newQuest, error: fetchNewQuestError } = await supabase
+        .from('quests')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('assigned_at', { ascending: false })
+        .limit(1)
+        .single()
+      
+      if (fetchNewQuestError || !newQuest) {
+        console.error('Error fetching newly generated quest:', fetchNewQuestError)
+        // Use fallback quest from API response
+        const fallbackQuest: DailyQuest = {
+          id: "fallback-" + Date.now(),
+          title: data.quest.title,
+          description: data.quest.description,
+          location: userLocation,
+          category: "Adventure",
+          difficulty: "Medium",
+          estimatedTime: "1-2 hours",
+          points: 150,
+          completed: false,
+          debug: data.quest.debug
+        }
+        setTodayQuest(fallbackQuest)
+        return
+      }
+      
+      // Set this as the current quest
+      await questUtils.setCurrentQuest(user.id, newQuest.id)
+      
+      // Add a small delay to prevent immediate regeneration
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Use the database quest
       const quest: DailyQuest = {
-        id: "1",
-        title: data.quest.title,
-        description: data.quest.description,
-        location: "Your area",
+        id: newQuest.id,
+        title: newQuest.title,
+        description: newQuest.description,
+        location: userLocation,
         category: "Adventure",
         difficulty: "Medium",
         estimatedTime: "1-2 hours",
@@ -107,11 +255,10 @@ export default function QuestPage() {
         debug: data.quest.debug
       }
 
-      console.log('Transformed quest:', quest)
+      console.log('Using newly generated quest:', quest)
       setTodayQuest(quest)
     } catch (error) {
       console.error('Error fetching quest:', error)
-      // Fallback to mock quest if API fails
       setTodayQuest(generateMockQuest())
     } finally {
       setIsLoading(false)
@@ -123,7 +270,7 @@ export default function QuestPage() {
       id: "1",
       title: "Discover a Local Art Gallery",
       description: "Visit a local art gallery or museum you've never been to before. Take time to appreciate at least 3 different pieces and learn about one local artist.",
-      location: "Your area",
+      location: userLocation,
       category: "Culture",
       difficulty: "Easy",
       estimatedTime: "1-2 hours",
@@ -155,34 +302,52 @@ export default function QuestPage() {
   }
 
   const handleCompleteQuest = async () => {
-    if (!user || !todayQuest) return
+    if (!user || !todayQuest || !photoData) return
     
     setIsCompleting(true)
     try {
-      // Save quest completion to Supabase
-      const questData = {
-        user_id: user.id,
-        title: todayQuest.title,
-        description: todayQuest.description,
-        tags: [todayQuest.category.toLowerCase()],
+      // Convert photo data URL to file
+      const photoFile = dataURLtoFile(photoData, `quest-${todayQuest.id}-${Date.now()}.jpg`)
+      
+      // Upload photo to Supabase storage with correct path
+      console.log('Uploading photo to Supabase storage...')
+      const filePath = `private/${user.id}/${Date.now()}-${photoFile.name}`;
+
+      const { data: uploadData, error: uploadError } = await supabase
+        .storage
+        .from('location-img')
+        .upload(filePath, photoFile);
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError.message);
+        alert("Failed to upload image.");
+        return;
+      }
+
+      console.log('Photo uploaded successfully to private folder:', filePath)
+
+      // Update the existing quest in Supabase with image path (not URL)
+      const completionDataToSave = {
+        status: 'completed',
+        completed_at: new Date().toISOString(),
         lat: completionData.lat,
         lng: completionData.lng,
-        assigned_at: new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-        status: 'completed',
         liked: completionData.liked,
         feedback_tags: completionData.feedback_tags,
         feedback_text: completionData.feedback_text,
-        elo_score: 1400
+        image_path: filePath, // Save the path instead of URL for private images
       }
 
-      const { error } = await questUtils.createQuest(questData)
+      const { error } = await questUtils.completeQuest(todayQuest.id, completionDataToSave)
       
       if (error) {
-        console.error('Error saving quest completion:', error)
+        console.error('Error updating quest completion:', error)
         alert('Error saving quest completion. Please try again.')
         return
       }
+
+      // Note: We don't clear current_quest_id to maintain caching
+      // The quest will be marked as completed but can still be loaded from cache
 
       // Update user streak
       try {
@@ -247,6 +412,84 @@ export default function QuestPage() {
       default:
         return "bg-gray-100 text-gray-800"
     }
+  }
+
+  const resetLocation = async () => {
+    if (!user) return
+    
+    try {
+      console.log('Resetting location for user:', user.id)
+      const success = await UserService.resetUserLocation(user.id)
+      if (success) {
+        console.log('Location reset successful, refreshing...')
+        await fetchUserLocation()
+        await fetchQuest()
+      }
+    } catch (error) {
+      console.error('Error resetting location:', error)
+    }
+  }
+
+  const startCamera = async () => {
+    try {
+      console.log('Starting camera...')
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'user', // Use front camera by default
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
+      })
+      console.log('Camera stream obtained:', stream)
+      setCameraStream(stream)
+    } catch (error) {
+      console.error('Error accessing camera:', error)
+      alert('Unable to access camera. Please make sure you have granted camera permissions.')
+    }
+  }
+
+  const takePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      const context = canvas.getContext('2d')
+      
+      if (context) {
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        context.drawImage(video, 0, 0, canvas.width, canvas.height)
+        
+        const photoDataUrl = canvas.toDataURL('image/jpeg')
+        setPhotoData(photoDataUrl)
+        setPhotoTaken(true)
+        stopCamera()
+      }
+    }
+  }
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop())
+      setCameraStream(null)
+    }
+  }
+
+  const retakePhoto = () => {
+    setPhotoTaken(false)
+    setPhotoData(null)
+    startCamera()
+  }
+
+  const dataURLtoFile = (dataURL: string, filename: string): File => {
+    const arr = dataURL.split(',');
+    const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
   }
 
   if (authLoading) {
@@ -345,7 +588,7 @@ export default function QuestPage() {
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="flex items-center text-sm text-gray-600">
                     <MapPin className="w-4 h-4 mr-2" />
-                    {todayQuest.location}
+                    {userLocation}
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
                     <Clock className="w-4 h-4 mr-2" />
@@ -496,11 +739,89 @@ export default function QuestPage() {
                   />
                 </div>
 
+                {/* Camera Capture - Required */}
+                <div className="space-y-2">
+                  <Label className="flex items-center">
+                    <Camera className="w-4 h-4 mr-2" />
+                    Take a Photo (Required)
+                    <span className="text-red-500 ml-1">*</span>
+                  </Label>
+                  
+                  {!photoTaken ? (
+                    <div className="space-y-4">
+                      {!cameraStream ? (
+                        <Button 
+                          onClick={startCamera} 
+                          variant="outline" 
+                          className="w-full"
+                        >
+                          <Camera className="w-4 h-4 mr-2" />
+                          Open Camera
+                        </Button>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="relative">
+                            <video
+                              ref={videoRef}
+                              autoPlay
+                              playsInline
+                              muted
+                              className="w-full h-64 object-cover rounded-lg border bg-gray-100"
+                            />
+                            <canvas
+                              ref={canvasRef}
+                              className="hidden"
+                            />
+                            {cameraStream && (
+                              <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
+                                Live
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex space-x-2">
+                            <Button 
+                              onClick={takePhoto} 
+                              className="flex-1"
+                            >
+                              <Camera className="w-4 h-4 mr-2" />
+                              Take Photo
+                            </Button>
+                            <Button 
+                              onClick={stopCamera} 
+                              variant="outline"
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="relative">
+                        <img
+                          src={photoData!}
+                          alt="Quest completion photo"
+                          className="w-full h-64 object-cover rounded-lg border"
+                        />
+                      </div>
+                      <Button 
+                        onClick={retakePhoto} 
+                        variant="outline" 
+                        className="w-full"
+                      >
+                        <Camera className="w-4 h-4 mr-2" />
+                        Retake Photo
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
                 {/* Action Buttons */}
                 <div className="flex space-x-2">
                   <Button 
                     onClick={handleCompleteQuest} 
-                    disabled={isCompleting} 
+                    disabled={isCompleting || !photoTaken} 
                     className="flex-1"
                   >
                     {isCompleting ? (

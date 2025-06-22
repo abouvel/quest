@@ -7,6 +7,8 @@ CREATE TABLE users (
   username TEXT UNIQUE,
   streak_count INT DEFAULT 0,
   daily_completed_date DATE,   -- tracks the last date user completed a quest
+  current_quest_id UUID REFERENCES quests(id), -- current active quest for the user
+  location_description TEXT,   -- user's current location as a string (e.g., "San Francisco, CA")
   preference_tags JSONB DEFAULT '{}', -- e.g. {"food": 1.0, "loud": -1.0}
   friends UUID[] DEFAULT '{}'  -- array of friend user IDs
 );
@@ -20,6 +22,7 @@ CREATE TABLE quests (
   tags TEXT[],                 -- e.g. ['solo', 'nature']
   lat DOUBLE PRECISION,
   lng DOUBLE PRECISION,
+   image_url TEXT; --points to image within the location-img file
 
   assigned_at TIMESTAMP DEFAULT now(),
   expires_at TIMESTAMP,        -- quest expiration time
