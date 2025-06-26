@@ -1,0 +1,106 @@
+SIMPLIFIED ADK QUEST GENERATION WORKFLOW (2024-06)
+=================================================
+
+## 1. Overview
+- Agents: QuestGeneratorAgent, WeatherAgent, LocationValidatorAgent, QuestFinalizerAgent
+- Tools: Google Search API (built-in), Open-Meteo Weather API, Supabase for storage
+- Fallback: If advanced pipeline fails, fallback to current quest generation logic
+- Response: Slightly different format is fine
+- Environment: All necessary API keys/config in .env
+
+=================================================
+## 2. Pipeline Structure
+
+### Step 1: QuestGeneratorAgent
+- Input: User location, interests, completed quest titles, user preferences (from Supabase)
+- Process:
+  - Generates a creative, location-specific quest idea
+  - Uses Google Search API to find popular/trending places/events
+  - Flags if quest is outdoor/indoor
+- Output: { title, description, locationName, locationType, isOutdoor }
+
+### Step 2: WeatherAgent
+- Input: Output from QuestGeneratorAgent
+- Process:
+  - Checks weather for the quest's location and time using Open-Meteo
+  - Determines if the quest is suitable (e.g., not suggesting a picnic in the rain)
+  - Suggests alternatives if weather is bad
+- Output: { ...quest, weatherOk, weatherSummary, weatherDetails }
+
+### Step 3: LocationValidatorAgent
+- Input: Output from WeatherAgent
+- Process:
+  - Validates the location using Google Search API and/or maps API
+  - If invalid, can regenerate or fallback
+- Output: { ...quest, coordinates, address, validationStatus }
+
+### Step 4: QuestFinalizerAgent
+- Input: Validated quest data
+- Process:
+  - Formats the final quest object
+  - Adds debug/context info if needed
+  - Stores quest and user feedback in Supabase
+- Output: { quest, debug, feedbackPrompt }
+
+### Step 5: Fallback Logic
+- If any step fails (API error, validation fails after N attempts), fallback to the current quest generation logic and return that result.
+
+=================================================
+## 3. Supabase Usage
+- Session Storage: Store ongoing quest generation sessions, user preferences, and feedback.
+- Tables:
+  - users (id, preferences, feedback, etc.)
+  - quest_sessions (session_id, user_id, state, created_at, etc.)
+  - quests (quest_id, user_id, data, created_at, feedback, etc.)
+
+=================================================
+## 4. .env Variables
+GOOGLE_SEARCH_API_KEY=your_google_search_api_key
+OPEN_METEO_API_URL=https://api.open-meteo.com/v1/forecast
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+
+=================================================
+## 5. Example Workflow
+
+User Request → QuestGeneratorAgent → WeatherAgent → LocationValidatorAgent → QuestFinalizerAgent → Response
+
+If any step fails → Fallback to current quest generation logic
+
+=================================================
+## 6. Error Handling & Fallback
+- If any agent or tool fails (API error, invalid data, etc.), log the error and fallback to the current quest generation logic.
+- Return a clear error/debug message in the response for troubleshooting.
+
+=================================================
+## 7. Next Steps
+1. Set up Supabase tables (users, quest_sessions, quests)
+2. Add new .env variables
+3. Implement the four-agent pipeline using ADK, Google Search, and Weather API
+4. Integrate fallback logic to current quest generation
+5. Test end-to-end flow and adjust as needed
+
+=================================================
+## 8. Folder/File Structure Suggestion
+
+- /lib/adk/
+  - questGeneratorAgent.js
+  - weatherAgent.js
+  - locationValidatorAgent.js
+  - questFinalizerAgent.js
+  - fallbackQuestGenerator.js
+  - workflow.js
+- /lib/
+  - supabase.js (Supabase client and helpers)
+- /cursorRef/
+  - ADK_pipeline.txt (this plan)
+  - API_Documentation.txt (weather API docs)
+  - googleAgents.txt (reference)
+
+=================================================
+## 9. Implementation Notes
+- Use async/await for all agent/tool calls
+- Add robust error handling and logging
+- Use Supabase for all persistent state and feedback
+- Keep agents modular for easy future extension (e.g., add feedback loop, more tools)
+- Document all environment variables and API requirements 

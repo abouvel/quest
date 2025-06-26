@@ -1,0 +1,316 @@
+================================
+QUESTMAP - PRESENTATION NOTES
+================================
+
+### 1. The Pitch (Elevator Pitch)
+QuestMap transforms your city into a playground. It's a smart web app that generates unique, real-world "quests"—from trying a specific dish at a local cafe to finding a hidden mural—to help you break your routine and discover the world around you. Compete with friends, build your adventure streak, and make every day more exciting.
+
+### 2. Core Features
+*   **AI-Powered Quest Generation:** Uses Google's Gemini AI to create unique, personalized quests based on user location and interests.
+*   **No Duplicates Ever:** The AI is specifically instructed to avoid suggesting any quest the user has already completed OR has currently active, ensuring fresh content every time.
+*   **Real-World Validation:** Integrates with the Google Maps API to verify that every AI-generated location is a real place with a valid address.
+*   **Social Leaderboard:** Users can add friends and compete on a leaderboard ranked by their "quest completion streak."
+*   **Interactive Quest Feed:** A dashboard that shows a feed of your own completed quests alongside your friends' achievements, complete with likes and comments.
+
+### 3. Tech Stack
+*   **Frontend:** Next.js / React (with TypeScript)
+*   **Styling:** Tailwind CSS & shadcn/ui
+*   **Backend:** Next.js API Routes (Serverless Functions)
+*   **Database & Auth:** Supabase (PostgreSQL) with Row Level Security (RLS)
+*   **AI:** Google Gemini
+*   **Geolocation:** Google Maps API
+
+### 4. How It Works (The Technical Flow)
+This is the core loop for generating a new quest:
+
+1.  **User Action:** The user clicks "Generate Quest" on the frontend.
+2.  **API Call:** An API request is sent from the browser to our server at `/api/generate-quest`.
+3.  **Server Logic (`UserService`):**
+    *   **Securely Fetches User Data:** Using a **secure admin client** (with a secret `SERVICE_ROLE_KEY`), it bypasses RLS to fetch the user's preferences from the `users` table in our Supabase database.
+    *   **Fetches ALL Past Quests:** It queries the `quests` table for **every quest** associated with that user—both `completed` and `active`. This is the key to preventing duplicates.
+4.  **AI Prompting (`ai.js`):**
+    *   **Constructs a Prompt:** It builds a detailed prompt for the Gemini AI, providing the user's location, interests, and the full list of titles to strictly avoid.
+    *   **Debug Logging:** It writes the full prompt details to a server-side log file (`ai-debug.log`) for troubleshooting.
+5.  **Validation & Response:**
+    *   The AI returns a potential quest (title, description, location name).
+    *   Our server then sends this location name to the **Google Maps API** to get real coordinates and an address.
+    *   The new, validated quest is saved to our database with an `active` status.
+6.  **Display:** The quest is sent back to the frontend and displayed to the user.
+
+### 5. Key Challenges & What We Learned
+*   **Challenge 1: Server-Side Authentication.**
+    *   **Problem:** Our server-side code was getting "User not found" errors because our database is protected by Row Level Security (RLS), and the server's API client was anonymous.
+    *   **Solution:** We implemented the standard, secure Supabase pattern: using a **secret `SERVICE_ROLE_KEY`** to create a privileged admin client *only* for trusted server operations. This respects our security rules while allowing the server to do its job. It was a key learning in full-stack security architecture.
+
+*   **Challenge 2: Preventing Duplicate Quests.**
+    *   **Problem:** The AI kept suggesting quests the user had already been assigned but hadn't completed.
+    *   **Solution:** We refactored our server logic. Instead of just excluding *completed* quests, the `UserService` now fetches a list of **all** quests (both completed and active) from the database every time. This complete exclusion list is then passed to the AI, guaranteeing a fresh quest.
+
+*   **Challenge 3: Client-Side Code "Leaking".**
+    *   **Problem:** At one point, we got a browser crash about missing environment variables. This happened because a client-side component was accidentally importing server-side code (`UserService`).
+    *   **Solution:** We fixed the import structure to enforce a strict separation. The client component now *only* communicates with the server through the designated API route, ensuring no secret keys or server logic are ever exposed to the browser.
+
+### 6. Demo Flow Suggestion
+1.  **Start on the Login Page:** Briefly mention the auth is handled by Supabase.
+2.  **Dashboard:** Show the main feed. Point out a few completed quests, maybe one from a friend. Show the like/comment feature.
+3.  **Leaderboard:** Click to the leaderboard. Explain that it's ranked by streak and shows your position among your friends.
+4.  **Generate a Quest (The Core Loop):**
+    *   Navigate to the "Quest" page.
+    *   Click the "New Day" or "Generate Quest" button.
+    *   **Talk through the technical flow (section 4) while it loads.** Explain that the server is fetching your preferences, getting a list of ALL your past quests, and securely talking to the AI.
+    *   When the new quest appears, read it out.
+5.  **Show the Proof (Optional but powerful):**
+    *   Briefly show the `ai-debug.log` file. Point to the latest entry and show the list of "Excluded Titles," proving that the "no duplicates" feature is working as described.
+6.  **Complete the Quest:** Show the completion flow (e.g., taking a photo).
+7.  **Wrap-up:** Circle back to the dashboard to show the newly completed quest at the top of the feed.
+
+### 7. Technical Implementation Details (Deeper Dive)
+
+*   **Database Schema & Security:**
+    *   We designed a PostgreSQL schema with a `users` table and a `quests` table. The `users` table holds profile information like `username`, `streak_count`, and a `friends` array (a `_uuid` array type). The `quests` table is linked via a `user_id` foreign key.
+    *   **Row Level Security (RLS)** is enabled on all critical tables. For example, the `users` table has a policy like `auth.uid() = id`, ensuring a user can only ever access their own row. This is the foundation of our data security.
+    *   For server-side tasks that need broader access (like our quest generation service), we use a dedicated, privileged Supabase client initialized with the secret `SERVICE_ROLE_KEY`. This is standard practice for separating user permissions from trusted system operations.
+
+*   **AI Prompt Engineering:**
+    *   The quality of the AI-generated quests depends entirely on the quality of the prompt. Our prompt is carefully engineered to be specific.
+    *   It includes the user's location (`in ${user.location}`), their interests (`Their preferences are: ...`), and a dynamic, critically important exclusion list: `IMPORTANT: Do not suggest any of these events - avoid them completely: [${questTitles.join(", ")}]`.
+    *   We also provide examples of good and bad quests directly in the prompt to guide the AI's output and explicitly ask it to return **only valid JSON** in a predefined format, which simplifies parsing on the server.
+
+*   **Stateless Server-Side Logic:**
+    *   A key architectural decision was to make our server-side code (especially `ai.js`) completely stateless. Early on, we had a bug where we tried to use a client-side global store on the server, which failed because each API call is a new, isolated environment.
+    *   The correct implementation has the `UserService` gather all necessary data from the database for every request. This makes the system more predictable and reliable, as there is no hidden state to manage on the server.
+
+*   **Client-Side State Management:**
+    *   On the client, we use a lightweight global store (`globalQuestStore.ts`) to cache the user's quests. This prevents redundant database calls when navigating between pages (like the Dashboard and Quest page).
+    *   The store has a simple time-based cache invalidation (5 minutes) and a loading flag to prevent race conditions where multiple components might try to fetch the same data simultaneously. It provides functions like `getCompletedQuests()` and `getIncompleteQuests()` that allow components to easily access the data they need from the cache.
+
+*   **Component-Based UI with Next.js:**
+    *   The entire frontend is built with React components, managed by Next.js. We have a clean separation of concerns:
+        *   **UI Components:** Reusable, stateless components from `shadcn/ui` (e.g., `Card`, `Button`).
+        *   **Page Components:** Larger components in the `app/` directory that manage state and data fetching for a specific page.
+        *   **Hooks:** Custom hooks like `useAuth` encapsulate logic for interacting with Supabase's auth state, making it easily accessible to any component that needs it.
+    *   This structure makes the codebase easy to maintain and scale.
+
+### 8. Anticipating Tough Questions (The "Grill" Section)
+
+**Q: Your server-side code uses a service role key with admin privileges. Isn't that a security risk?**
+**A:** That's a great question. We're following the standard, recommended Supabase architecture for this exact scenario. The `SERVICE_ROLE_KEY` is **only** used in our server-side API routes, which are trusted, controlled environments. It is never exposed to the client/browser. The alternative would be to pass the user's JWT from the client to the server on every API call and create a new user-level client for each request. While possible, that adds significant complexity. Using the service key on a trusted server is the conventional and secure pattern for allowing a backend system to perform actions that a user has initiated, especially when it needs to bypass RLS for legitimate system-level tasks (like fetching user data to generate a quest).
+
+**Q: Why did you choose to use a global store for client-side caching instead of a more robust library like React Query or SWR?**
+**A:** For the scope of this hackathon project, a simple, custom global store was the most direct and lightweight solution. It solved our specific problem—preventing redundant fetches between a few key pages—without adding another dependency. Libraries like React Query are fantastic for complex data synchronization, automatic refetching, and intricate cache invalidation, but for our use case (caching a single list of quests for a short duration), a simple object with a timestamp was sufficient and kept the project lean. If this were to grow into a larger production application, migrating to SWR or React Query would be a logical next step to handle more complex caching scenarios.
+
+**Q: Your AI prompt includes a list of every quest title a user has ever had. What happens when a user has hundreds of quests? Won't the prompt get too long and expensive?**
+**A:** This is an excellent point about scalability. Currently, the prompt size grows linearly with the number of quests.
+    *   **Short-term:** For a reasonable number of quests (e.g., up to a few hundred), this approach is effective and reliable. The cost and token limit are manageable.
+    *   **Long-term Scalability Plan:** As the app scales, this would need to be optimized. The best approach would be to move away from a simple exclusion list and towards **embedding-based semantic search**. We would convert each quest title/description into a vector embedding and store it. When generating a new quest, we would generate a few candidates, convert them to embeddings, and then perform a similarity search against the user's existing quest vectors. If a candidate is too similar to an existing quest, we discard it and try again. This is a much more scalable and sophisticated method for ensuring novelty.
+
+**Q: How do you handle potential errors or bad data from the AI? What if it returns malformed JSON or a location that doesn't exist?**
+**A:** We have a multi-layered defense against this.
+    1.  **Prompt Engineering:** We explicitly instruct the AI in the prompt to return *only* valid JSON in a specific format. This works most of the time.
+    2.  **Server-Side Parsing & Validation:** The server wraps the `JSON.parse()` call in a `try...catch` block. If the AI returns malformed JSON or any other non-JSON text, the parse will fail, the error is logged, and the entire quest generation process is aborted gracefully. We don't save a broken quest.
+    3.  **Real-World Geolocation Validation:** After a successful JSON parse, we take the `locationName` and send it to the **Google Maps API**. If the Maps API cannot find a valid location for that name, we consider the quest invalid. The `validateQuestLocation` function returns an error, and we do not save the quest to the database. This prevents the user from being sent on a quest to a fictional or non-existent place.
+
+**Q: You mentioned RLS (Row Level Security). How exactly does that protect user data in the `quests` and `users` tables?**
+**A:** RLS is our primary data security layer at the database level.
+    *   **On the `users` table**, the policy is `auth.uid() = id`. This means any client-side request from an authenticated user can only ever see or modify the single row that matches their own user ID. They cannot even see that other users exist.
+    *   **On the `quests` table**, we have similar policies like `auth.uid() = user_id`. This ensures a user can only select, update, or delete quests where their ID is in the `user_id` column.
+    *   The only exception is our server-side code using the service key, which is allowed to bypass these rules to perform its duties, but all direct access from the browser is strictly locked down by these policies. 
+
+### 9. How Everything Works (Deep Technical Dive)
+
+**🏗️ Overall Architecture**
+Your app follows a modern full-stack architecture with clear separation of concerns:
+- **Frontend**: Next.js 14 with React, TypeScript, and Tailwind CSS
+- **Backend**: Next.js API routes (serverless functions)
+- **Database**: Supabase (PostgreSQL) with Row Level Security
+- **Authentication**: Supabase Auth with JWT tokens
+- **AI**: Google Gemini API for quest generation
+- **Maps**: Google Maps API for location validation
+- **Storage**: Supabase Storage for images
+
+**🔐 Authentication Flow (The Complete Journey)**
+1. **Landing Page** (`app/page.tsx`): Users see a beautiful gradient background with login/signup tabs
+2. **useAuth Hook** (`hooks/useAuth.ts`): Manages authentication state using React hooks
+   - `useState` tracks user, loading, and error states
+   - `useEffect` sets up auth state listener on component mount
+   - Calls `authUtils.getCurrentUser()` to get initial user state
+   - Sets up `onAuthStateChange` subscription to listen for login/logout events
+3. **Supabase Client** (`lib/supabaseClient.js`): Uses the public anon key for client-side operations
+4. **Auth Utils** (`lib/supabaseUtils.js`): Wraps Supabase auth methods with additional logic
+   - `signUp()`: Creates auth user + inserts record into `users` table
+   - `signIn()`: Authenticates + ensures user record exists
+   - `createUserRecord()`: Inserts new user with default values (streak_count: 0, preference_tags: {})
+5. **Database Integration**: Every auth operation triggers database operations to keep `users` table in sync
+
+**🗄️ Database Design & Security**
+**Tables Structure:**
+- `users`: Core user data (id, username, streak_count, preference_tags, current_quest_id)
+- `quests`: All quest data (id, user_id, title, description, status, coordinates, timestamps)
+- `friends`: Friend relationships (user_id, friend_id)
+- `posts`: Social feed posts (deprecated, using quests table instead)
+
+**Row Level Security (RLS) Policies:**
+- `users` table: `auth.uid() = id` - Users can only see their own data
+- `quests` table: `auth.uid() = user_id` - Users can only see their own quests
+- `friends` table: `auth.uid() = user_id OR auth.uid() = friend_id` - Users can see their friend relationships
+
+**🔑 Dual Supabase Client Architecture**
+You have TWO Supabase clients for different purposes:
+1. **Client-Side** (`lib/supabaseClient.js`): Uses `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - Used in React components and hooks
+   - Respects RLS policies
+   - Authenticated via user's browser session
+2. **Server-Side** (`lib/supabase.js`): Uses `SUPABASE_SERVICE_ROLE_KEY`
+   - Used in API routes and server-side services
+   - Bypasses RLS for trusted operations
+   - Has admin privileges for system-level tasks
+
+**🤖 AI Quest Generation (The Magic)**
+**Complete Flow:**
+1. **User Request**: Dashboard calls `/api/generate-quest` with user ID
+2. **API Route** (`app/api/generate-quest/route.ts`): Validates request and calls `UserService.generateUserQuest()`
+3. **UserService** (`lib/userService.js`): The orchestrator
+   - Fetches user data and preferences from database
+   - Gets ALL quest titles (completed + active) for exclusion list
+   - Calls `generateQuest()` with user data and exclusion list
+4. **AI Engine** (`ai.js`): The brain
+   - Uses Google Gemini 1.5 Flash model
+   - Constructs detailed prompt with user location, interests, and exclusion list
+   - Logs debug info to `ai-debug.log` for transparency
+   - Returns structured JSON with title, description, and locationName
+5. **Location Validation** (`lib/mapsApi.js`): The reality check
+   - Takes AI-generated locationName and searches Google Maps API
+   - Validates the place actually exists in user's area
+   - Returns real coordinates, address, and rating
+   - Multiple fallback strategies if exact match fails
+
+**🗺️ Maps Integration (Making It Real)**
+**Google Maps API Usage:**
+- **Places API**: Searches for real locations by name
+- **Text Search**: Primary method for finding places
+- **Place Details**: Gets full information including coordinates
+- **Fallback Strategy**: If exact match fails, tries partial matches
+
+**Location Validation Process:**
+1. Search with exact `locationName + userLocation`
+2. If fails, try first word before apostrophe
+3. If fails, try first two words
+4. Get detailed place info including coordinates
+5. Return enhanced quest with real location data
+
+**📱 Client-Side State Management**
+**Global Quest Store** (`lib/globalQuestStore.ts`):
+- In-memory cache for quest data
+- 5-minute cache duration to prevent excessive API calls
+- Prevents multiple simultaneous fetches
+- Provides methods for getting completed/incomplete quests
+- Used across dashboard, map, and quest pages
+
+**React State Management:**
+- `useState` for local component state
+- `useAuth` hook for authentication state
+- Global store for shared quest data
+- No complex state management library needed for this scope
+
+**🔄 Data Flow Patterns**
+
+**Quest Generation Flow:**
+```
+User clicks "Generate Quest" 
+→ Dashboard calls /api/generate-quest 
+→ UserService fetches user data + all quest titles 
+→ AI generates quest with exclusion list 
+→ Maps API validates location 
+→ Quest saved to database 
+→ User redirected to quest page
+```
+
+**Quest Completion Flow:**
+```
+User completes quest on quest page 
+→ Photo uploaded to Supabase Storage 
+→ Quest marked as completed in database 
+→ Coordinates preserved from original quest 
+→ User redirected to dashboard 
+→ Dashboard fetches updated quest history
+```
+
+**Social Feed Flow:**
+```
+Dashboard loads 
+→ Fetches user's completed quests 
+→ Fetches friends list 
+→ Fetches friends' completed quests 
+→ Combines and sorts by completion date 
+→ Transforms into post format 
+→ Renders with images (signed URLs for private storage)
+```
+
+**🔧 Key Technical Decisions Explained**
+
+**Why Two Supabase Clients?**
+- **Security**: Client-side code can't access service role key (never exposed to browser)
+- **Performance**: Server-side operations bypass RLS for efficiency
+- **Architecture**: Follows Supabase best practices for full-stack apps
+
+**Why Global Quest Store Instead of React Query?**
+- **Simplicity**: Single list of quests, short cache duration
+- **Performance**: Prevents redundant fetches between pages
+- **Scope**: Hackathon project doesn't need complex cache invalidation
+
+**Why AI + Maps Validation?**
+- **AI Creativity**: Generates interesting, personalized quests
+- **Maps Reality Check**: Ensures quests point to real, accessible locations
+- **User Experience**: Prevents sending users to fictional places
+
+**Why Row Level Security?**
+- **Data Protection**: Users can't access each other's data
+- **Security**: Database-level enforcement, not just application-level
+- **Scalability**: Works regardless of application complexity
+
+**🛡️ Error Handling & Resilience**
+
+**Multi-Layer Error Handling:**
+1. **AI Response Parsing**: Try-catch around JSON.parse()
+2. **Location Validation**: Graceful fallback if place not found
+3. **Database Operations**: Error logging and graceful degradation
+4. **Network Requests**: Timeout handling and retry logic
+5. **User Interface**: Loading states and error messages
+
+**Graceful Degradation:**
+- If AI fails, user gets error message
+- If Maps API fails, quest continues without coordinates
+- If image upload fails, quest completes without photo
+- If database fails, user sees appropriate error message
+
+**📊 Performance Optimizations**
+
+**Caching Strategy:**
+- Global quest store with 5-minute cache
+- Signed URLs for private images (1-hour expiry)
+- Client-side state to prevent redundant API calls
+
+**Database Optimization:**
+- Indexed queries on user_id and status
+- Efficient RLS policies
+- Minimal data fetching (only needed fields)
+
+**API Optimization:**
+- Single API call for quest generation
+- Batch operations where possible
+- Efficient error handling to prevent cascading failures
+
+**🔍 Debugging & Monitoring**
+
+**Debug Logging:**
+- `ai-debug.log`: AI prompt inputs and exclusion lists
+- Console logging throughout the application
+- Error tracking in all critical functions
+
+**Development Tools:**
+- TypeScript for type safety
+- ESLint for code quality
+- Tailwind CSS for consistent styling
+- Next.js development server with hot reload
+
+This architecture demonstrates a sophisticated understanding of modern web development patterns, with careful attention to security, performance, and user experience. The separation of concerns, proper error handling, and thoughtful use of external APIs shows production-ready thinking. 

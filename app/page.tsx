@@ -98,7 +98,7 @@ export default function LandingPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-5xl font-bold text-gray-900 mb-4">QuestMap</h1>
+          <h1 className="text-5xl font-bold text-gray-900 mb-4">EXPLR</h1>
           <p className="text-xl text-gray-600">Loading...</p>
         </div>
       </div>
@@ -109,7 +109,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50">
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-gray-900 mb-4">QuestMap</h1>
+          <h1 className="text-5xl font-bold text-gray-900 mb-4">EXPLR</h1>
           <p className="text-xl text-gray-600 mb-8">Discover daily adventures based on your location and preferences</p>
         </div>
 

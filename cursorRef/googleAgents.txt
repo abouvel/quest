@@ -1,0 +1,205 @@
+ADK DEVELOPMENT REFERENCE FOR CURSOR AI
+
+=================================================
+OVERVIEW
+
+The Agent Development Kit (ADK) by Google is a framework for building modular, multi-agent AI systems that can integrate tools, maintain state, and automate complex workflows.
+
+Use this guide to:
+
+Structure agents and sessions properly
+
+Leverage tools like Google Search and function calls
+
+Design pipelines using sequential, parallel, and loop agents
+
+Understand best practices for session state, output schemas, and tool usage
+
+=================================================
+
+CORE CONCEPTS
+=================================================
+
+AGENT PROPERTIES
+
+Each agent requires:
+
+name: Must match the folder or component name.
+
+model: Gemini or OpenAI models (via LiteLLM/OpenRouter).
+
+description: Used for logging and interface clarity.
+
+instruction: System prompt defining agent behavior.
+
+tools: Optional functions or external APIs the agent can call.
+
+output_key: Saves output in session state.
+
+include_contents: Can be 'none', 'auto', or a specific include behavior.
+
+SESSION + STATE MANAGEMENT
+
+SessionService manages the full context of a user-agent interaction.
+
+InMemorySessionService: Stores session in memory (volatile).
+
+DatabaseSessionService: Persists sessions to disk.
+
+VertexAiSessionService: Stores sessions in Google Cloud.
+
+State: Dictionary storing intermediate agent results.
+
+Examples: state["generated_code"], state["review_comments"]
+
+Enables coordination between agents
+
+InvocationContext: Provides metadata like user_id, app_name, session_id, and shared state.
+
+EVENTS
+
+Event: Captures each user/agent interaction.
+
+Tracked via EventActions such as tool_call, agent_input, agent_output.
+
+Useful for audits, debugging, and analytics.
+
+=================================================
+2. TOOL USAGE
+
+TOOL TYPES
+
+Function tools: Python-callable functions (e.g., exit_loop)
+
+Built-in tools: ADK-provided (e.g., Google Search)
+
+Third-party tools: Custom APIs wrapped in tool format
+
+ADDING TOOLS
+
+Defined in the agent as: tools=[my_tool_function]
+
+Must return serializable outputs (dict or primitive types)
+
+CALLBACK HOOKS
+
+before_model(context): Filter/modify prompt
+
+after_model(context, result): Reformat model outputs
+
+before_tool(context): Check and modify tool args
+
+after_tool(context, result): Log or post-process result
+
+EXAMPLE TOOL FUNCTION
+
+def exit_loop(tool_context: ToolContext):
+    tool_context.actions.escalate = True
+    return {}
+
+=================================================
+3. WORKFLOW ARCHITECTURES
+
+SEQUENTIAL AGENTS
+
+SequentialAgent(sub_agents=[...])
+
+Executes sub-agents in strict order
+
+Output from one agent is saved to state, passed to the next
+
+Example use case: code writing, review, then refactor
+
+LOOP AGENTS
+
+LoopAgent(sub_agents=[...], max_iterations=5)
+
+Repeats execution of its sub-agents until a condition is met
+
+One sub-agent typically provides critique, the other applies changes
+
+Use exit_loop() tool when refinement is complete
+
+PARALLEL AGENTS
+
+ParallelAgent(sub_agents=[...])
+
+Runs all sub-agents concurrently (async)
+
+Best for research or monitoring multiple sources
+
+Outputs stored to different output_key values in shared state
+
+No automatic state sharing during execution; must pass data explicitly
+
+=================================================
+4. AGENT PIPELINE EXAMPLES
+
+CODE GENERATION PIPELINE (Sequential)
+
+CodeWriterAgent: Writes code
+
+CodeReviewerAgent: Reviews code
+
+CodeRefactorerAgent: Refines code
+
+RESEARCH PIPELINE (Parallel + Sequential)
+
+Parallel agents: RenewableEnergyResearcher, EVResearcher, CarbonCaptureResearcher
+
+Sequential merger: Synthesizes results into a final report
+
+WRITING PIPELINE (Loop)
+
+InitialWriterAgent: Drafts story
+
+CriticAgent: Reviews story
+
+RefinerAgent: Improves based on critique
+
+Loop ends when feedback = "No major issues found."
+
+=================================================
+5. STRUCTURED OUTPUTS
+
+WHY USE STRUCTURED OUTPUTS?
+
+Ensures consistency
+
+Enables chaining agents
+
+Prevents parsing issues
+
+DEFINE SCHEMAS
+
+Use output_key to store in session state
+
+Use state placeholders in prompts:
+
+{generated_code}, {review_comments}, etc.
+
+Use structured JSON-compatible formats if expecting multi-field output
+
+=================================================
+6. BEST PRACTICES
+
+Keep agent instructions concise and role-specific
+
+Always define output_key for state tracking
+
+Use callbacks to enforce security and formatting
+
+Use LiteLLM and OpenRouter to decouple models from infrastructure
+
+Limit loop agents with max_iterations
+
+For production systems, prefer DatabaseSessionService or VertexAiSessionService
+
+=================================================
+7. RESOURCES
+
+Official Docs: https://google.github.io/adk-docs/get-started/quickstart/
+
+Video Guide: https://www.youtube.com/watch?v=P4VFL9nIaIA
+
+Gemini SDK: https://ai.google.dev/gemini-api
