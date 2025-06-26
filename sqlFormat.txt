@@ -22,7 +22,7 @@ CREATE TABLE quests (
   tags TEXT[],                 -- e.g. ['solo', 'nature']
   lat DOUBLE PRECISION,
   lng DOUBLE PRECISION,
-   image_url TEXT; --points to image within the location-img file
+  image_url TEXT; --points to image within the location-img file
 
   assigned_at TIMESTAMP DEFAULT now(),
   expires_at TIMESTAMP,        -- quest expiration time

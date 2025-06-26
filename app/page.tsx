@@ -76,16 +76,9 @@ export default function LandingPage() {
     if (error) {
       setAuthError(error)
     } else {
-      // Show success message and redirect to signin
-      setSuccessMessage("Account created successfully! Please sign in.")
-      // Switch to login tab after successful signup
-      const tabsList = document.querySelector('[role="tablist"]') as HTMLElement
-      if (tabsList) {
-        const loginTab = tabsList.querySelector('[value="login"]') as HTMLElement
-        if (loginTab) {
-          loginTab.click()
-        }
-      }
+      // Show clear success message about email confirmation
+      setSuccessMessage("Account created successfully! Please check your email and click the confirmation link to continue. You'll be able to sign in after confirming your email.")
+      // Don't automatically switch to login tab - let user see the message
       // Clear the form
       setEmail("")
       setPassword("")
