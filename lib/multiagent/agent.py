@@ -63,7 +63,13 @@ search_agent = Agent(
     model="gemini-2.0-flash",
     name="search_agent",
     instruction="""
-Using the provided {weather_suggestions}, output ONLY valid JSON in this exact format:
+You will receive:
+- weather_suggestions: activity suggestions from the weather agent
+- current_location: the user's current location (latitude, longitude, city/state)
+
+For each weather suggestion, use google_search to find a specific, real, and popular location or event that matches the activity and is within driving distance (within 50 miles) of the current_location. Always include the user's city/state in your search queries to ensure results are nearby. Do NOT call any tool to get the location; use the provided current_location.
+
+Output ONLY valid JSON in this exact format:
 {
   "search_results": [
     {
@@ -74,8 +80,6 @@ Using the provided {weather_suggestions}, output ONLY valid JSON in this exact f
     }
   ]
 }
-
-For each suggestion, search for a specific, real, and popular location or event that matches the activity. Make sure the place exists and is well-reviewed.
 
 Example:
 {
@@ -89,7 +93,7 @@ Example:
   ]
 }
 """,
-    tools=[google_search, get_current_location],
+    tools=[google_search],
     output_key="search_results"
 )
 search_tool = AgentTool(search_agent)
@@ -115,7 +119,9 @@ Given a summary of the user's interests and preferences {user_summary} and the c
   ]
 }
 
-Suggest 2-3 specific, creative activities or quests that would be enjoyable and appropriate for the weather. Only suggest activities that are suitable for the current weather (e.g., don't suggest outdoor activities if it's raining). Use the user_summary to personalize your suggestions.
+First, get the current weather using get_weather() and get_current_time(). Then suggest 2-3 specific, creative activities or quests that would be enjoyable and appropriate for the weather. Only suggest activities that are suitable for the current weather (e.g., don't suggest outdoor activities if it's raining). Use the user_summary to personalize your suggestions.
+
+IMPORTANT: Only suggest events or activities that are available to do TODAY (the day this request is submitted). Do NOT suggest events that are only available on future dates.
 
 Example:
 {
@@ -131,8 +137,10 @@ Example:
   ]
 }
 """,
+    tools=[get_weather, get_current_time],
     output_key="weather_suggestions"
 )
+weather_tool = AgentTool(weather_agent)
 
 # Summarizer agent for user interests and past events
 summarizer_agent = Agent(
@@ -158,26 +166,16 @@ Example:
     description="Summarizes user interests and past events into a user profile.",
     output_key="user_summary"
 )
+summarizer_tool = AgentTool(summarizer_agent)
 
 # Final reformatter agent to produce the required output format
 reformatter_agent = Agent(
     model="gemini-2.0-flash",
     name="reformatter_agent",
     instruction="""
-You are a response formatter. Given the search results in the following JSON format:
+You are a response formatter. Given the search results, reformat and output ONLY valid JSON in this final required format:
 {
-  "results": [
-    {
-      "suggestion_title": "...",
-      "place_name": "...",
-      "address": "...",
-      "description": "..."
-    }
-  ]
-}
-Reformat and output ONLY valid JSON in this final required format:
-{
-  "quest": {
+  "final_quest": {
     "title": "...",
     "description": "...",
     "locationName": "...",
@@ -185,9 +183,11 @@ Reformat and output ONLY valid JSON in this final required format:
   }
 }
 
-Use the first result in the list as the quest. Example:
+Use the first result in the search_results list as the quest. IMPORTANT: The quest you select must be available to do TODAY (the day this request is submitted). Do NOT select events that are only available on future dates.
+
+Example:
 {
-  "quest": {
+  "final_quest": {
     "title": "Visit a Local Art Museum",
     "description": "See the 'American Gothic' painting and enjoy world-class exhibits.",
     "locationName": "Philadelphia Museum of Art",
@@ -197,10 +197,29 @@ Use the first result in the list as the quest. Example:
 """,
     output_key="final_quest"
 )
+reformatter_tool = AgentTool(reformatter_agent)
 
-code_pipeline_agent = SequentialAgent( 
-    description="this function is designed to find the perfect place to do a daily quest. Make sure you go through the whole pipline and print out {final_quest} ",
+code_pipeline_agent = Agent(
+    model="gemini-2.0-flash",
+    description="This function is designed to find the perfect place to do a daily quest. Make sure you go through the whole pipeline and print out {final_quest}",
     name="code_pipeline_agent",
-    sub_agents=[summarizer_agent, weather_agent, search_agent, reformatter_agent],
+    instruction="""
+You are a quest generation pipeline coordinator. Follow these steps in order:
+
+1. First, call the summarizer_tool to get a user summary based on their interests and past events
+2. Then, call the weather_tool with the user summary to get weather-appropriate activity suggestions (this agent will get weather data internally)
+3. Next, call get_current_location and store the result in state as current_location. Then call the search_tool with both the weather suggestions and the current_location from state.
+4. Finally, call the reformatter_tool to format the final quest output
+
+Make sure to pass the output from each step as input to the next step. The final output should be a quest in the required format.
+
+Call the tools in this exact sequence:
+1. summarizer_tool
+2. weather_tool  
+3. get_current_location, then search_tool with weather_suggestions and current_location
+4. reformatter_tool
+""",
+    tools=[summarizer_tool, weather_tool, search_tool, reformatter_tool, get_current_location],
+    output_key="final_quest"
 )
 

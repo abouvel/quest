@@ -32,6 +32,7 @@ interface DailyQuest {
     completedTitles: string[]
     prompt: string
   }
+  address?: string
 }
 
 interface QuestCompletion {
@@ -204,6 +205,7 @@ export default function QuestPage() {
             estimatedTime: "1-2 hours",
             points: 150,
             completed: currentQuest.status === 'completed',
+            address: currentQuest.address,
           }
           
           console.log('Using existing quest:', quest)
@@ -276,7 +278,8 @@ export default function QuestPage() {
           estimatedTime: "1-2 hours",
           points: 150,
           completed: false,
-          debug: data.quest.debug
+          debug: data.quest.debug,
+          address: data.quest.address,
         }
         setTodayQuest(fallbackQuest)
         return
@@ -299,7 +302,8 @@ export default function QuestPage() {
         estimatedTime: "1-2 hours",
         points: 150,
         completed: false,
-        debug: data.quest.debug
+        debug: data.quest.debug,
+        address: newQuest.address,
       }
 
       console.log('Using newly generated quest:', quest)
@@ -330,6 +334,7 @@ export default function QuestPage() {
       estimatedTime: "1-2 hours",
       points: 100,
       completed: false,
+      address: "123 Main St, City, State",
     }
   }
 
@@ -677,7 +682,7 @@ export default function QuestPage() {
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="flex items-center text-sm text-gray-600">
                     <MapPin className="w-4 h-4 mr-2" />
-                    {userLocation}
+                    {todayQuest.address || userLocation}
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
                     <Clock className="w-4 h-4 mr-2" />

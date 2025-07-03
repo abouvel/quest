@@ -9,7 +9,15 @@ import os
 import asyncio
 from google.genai import types # For creating message Content/Parts
 import requests
-from agent import  code_pipeline_agent
+from lib.multiagent.agent import  code_pipeline_agent
+import argparse
+import json
+from lib.multiagent.maps_api import validate_quest_location
+
+# FastAPI imports
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+import uvicorn
 
 session_service = InMemorySessionService()
 
@@ -25,48 +33,84 @@ async def call_agent_async(query: str, runner, user_id, session_id):
     # Prepare the user's message in ADK format
     content = types.Content(role='user', parts=[types.Part(text=query)])
 
-    final_response_text = "Agent did not produce a final response." # Default
+    final_response_text = None
 
-    # Key Concept: run_async executes the agent logic and yields Events.
-    # We iterate through events to find the final answer.
+    # Iterate through events to find the final answer.
     async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=content):
-        # Uncomment to see all events:
-        print(f"  [Event] Author: {event.author}, Type: {type(event).__name__}, Final: {event.is_final_response()}, Content: {event.content}")
-    
-    #     if event.is_final_response():
-    #         if event.content and event.content.parts:
-    #             final_response_text = event.content.parts[0].text
-    #         elif event.actions and event.actions.escalate:
-    #             final_response_text = f"Agent escalated: {event.error_message or 'No specific message.'}"
-    #         break
+        # Print all events for debugging
+        if event.content and event.content.parts:
+            print(f"   Content: {event.content.parts[0].text}")
+        # Check for final response
+        if hasattr(event, 'is_final_response') and event.is_final_response():
+            if event.content and event.content.parts:
+                final_response_text = event.content.parts[0].text
+            elif getattr(event, 'actions', None) and getattr(event.actions, 'escalate', False):
+                final_response_text = f"Agent escalated: {getattr(event, 'error_message', 'No specific message.')}"
+            break
 
-    # print(f"<<< Agent Response: {final_response_text}")
+    print(f"<<< Agent Response: {final_response_text}")
+    return final_response_text
 
-async def main():
+async def generate_quest_py(user, questTitles, userId):
     # Create the specific session where the conversation will happen
     session = await session_service.create_session(
         app_name=APP_NAME,
-        user_id=USER_ID,
-        session_id=SESSION_ID,
-        state={
-        "interests": ["outdoors", "art", "restaurants"],
-        "past_events": ["Visit the Modern Art Museum", "Hiking at Blue Hills"]
-    }
+        user_id=userId,
+        session_id=SESSION_ID
     )
-    print(f"Session created: App='{APP_NAME}', User='{USER_ID}', Session='{SESSION_ID}'")
-
-    # --- Runner ---
-    # Key Concept: Runner orchestrates the agent execution loop.
+    # Store user info in session state if needed
+    session.state["interests"] = user.get("interests", "")
+    session.state["location"] = user.get("location", "")
+    session.state["preference"] = user.get("preference", "")
+    session.state["completedTitles"] = questTitles
     runner = Runner(
-        agent=code_pipeline_agent, # The agent we want to run
-        app_name=APP_NAME,   # Associates runs with our app
-        session_service=session_service # Uses our session manager
+        agent=code_pipeline_agent,
+        app_name=APP_NAME,
+        session_service=session_service
     )
-    print(f"Runner created for agent '{runner.agent.name}'.")
-    # Example usage:
-    await call_agent_async("", runner, USER_ID, SESSION_ID)
-    return session, runner
+    # Compose a user query string
+    query = f"I like {', '.join(user.get('interests', []))}. I have already gone to {', '.join(questTitles)}. My location is {user.get('location', '')}."
+    result = await call_agent_async(query, runner, userId, SESSION_ID)
+    # Clean and parse the result if it's a string
+    import re
+    if isinstance(result, str):
+        result = re.sub(r"^```json|```$", "", result, flags=re.MULTILINE).strip()
+        try:
+            result = json.loads(result)
+        except Exception:
+            pass
+    # Only handle 'final_quest' structure
+    if isinstance(result, dict) and 'final_quest' in result:
+        quest_obj = result['final_quest']
+        validated = validate_quest_location(quest_obj)
+        result['final_quest'] = validated
+        return result
+    return result
 
-# Entry point for running as a script
+# FastAPI app
+app = FastAPI()
+
+@app.post("/generate-quest")
+async def generate_quest_endpoint(request: Request):
+    data = await request.json()
+    user = data.get("user")
+    questTitles = data.get("questTitles")
+    userId = data.get("userId", USER_ID)
+    quest = await generate_quest_py(user, questTitles, userId)
+    return JSONResponse(content=quest)
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="Run ADK quest pipeline.")
+    parser.add_argument('--user', type=str, required=True, help='User JSON string')
+    parser.add_argument('--quests', type=str, required=True, help='Quest titles JSON string')
+    parser.add_argument('--userId', type=str, default=USER_ID, help='User ID')
+    args = parser.parse_args()
+    user = json.loads(args.user)
+    questTitles = json.loads(args.quests)
+    userId = args.userId
+    quest = asyncio.run(generate_quest_py(user, questTitles, userId))
+    # Print only the final quest JSON to stdout
+    if isinstance(quest, dict):
+        print(json.dumps(quest))
+    else:
+        print(quest)
