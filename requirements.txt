@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+requests
+google-adk
+google-genai
+# zoneinfo is included in Python 3.9+, use backports.zoneinfo for older versions
+backports.zoneinfo; python_version<'3.9'
+asyncio 
