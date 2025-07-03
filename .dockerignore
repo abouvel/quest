@@ -1,0 +1,28 @@
+# Node and Python dependencies
+node_modules
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+
+# Vercel and deployment
+.vercel
+
+# Git
+.git
+.gitignore
+
+# OS and editor files
+.DS_Store
+*.swp
+*.swo
+
+# Log files
+*.log
+
+# Build output
+.next
+out
+coverage 
