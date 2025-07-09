@@ -12,23 +12,22 @@ from google.genai import types # For creating message Content/Parts
 import requests
 from datetime import datetime
 
-def get_current_location():
-    try:
-        response = requests.get("https://ipinfo.io/json")
-        response.raise_for_status()
-        data = response.json()
-        loc = data.get("loc")  # Format: "latitude,longitude"
-        if loc:
-            latitude, longitude = map(float, loc.split(","))
-            return latitude, longitude
-    except Exception as e:
-        print(f"Error fetching current location: {e}")
-    # Default to a known location if lookup fails
-    return 52.52, 13.41  # Berlin, as fallback
+# def get_current_location():
+#     try:
+#         response = requests.get("https://ipinfo.io/json")
+#         response.raise_for_status()
+#         data = response.json()
+#         loc = data.get("loc")  # Format: "latitude,longitude"
+#         if loc:
+#             latitude, longitude = map(float, loc.split(","))
+#             return latitude, longitude
+#     except Exception as e:
+#         print(f"Error fetching current location: {e}")
+#     # Default to a known location if lookup fails
+#     return 52.52, 13.41  # Berlin, as fallback
+# not used anymore. Can uncomment if you want to use serverside. 
 
-
-def get_weather() -> dict:
-    latitude, longitude = get_current_location()
+def get_weather(latitude, longitude) -> dict:
     url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m"
     try:
         response = requests.get(url)
@@ -105,7 +104,7 @@ weather_agent = Agent(
         "Agent that suggests activities based on the user's summarized interests and the current weather. It will recommend things to do that match the weather conditions and the user's preferences."
     ),
     instruction="""
-Given a summary of the user's interests and preferences {user_summary} and the current weather report, output ONLY valid JSON in this exact format:
+Given a summary of the user's interests and preferences {user_summary} and coordinates {coordinates}, output ONLY valid JSON in this exact format:
 {
   "weather_suggestions": [
     {
@@ -119,7 +118,7 @@ Given a summary of the user's interests and preferences {user_summary} and the c
   ]
 }
 
-First, get the current weather using get_weather() and get_current_time(). Then suggest 2-3 specific, creative activities or quests that would be enjoyable and appropriate for the weather. Only suggest activities that are suitable for the current weather (e.g., don't suggest outdoor activities if it's raining). Use the user_summary to personalize your suggestions.
+First, get the current weather using get_weather() with the provided coordinates and get_current_time(). Then suggest 2-3 specific, creative activities or quests that would be enjoyable and appropriate for the weather. Only suggest activities that are suitable for the current weather (e.g., don't suggest outdoor activities if it's raining). Use the user_summary to personalize your suggestions.
 
 IMPORTANT: Only suggest events or activities that are available to do TODAY (the day this request is submitted). Do NOT suggest events that are only available on future dates.
 
@@ -209,19 +208,19 @@ code_pipeline_agent = Agent(
 You are a quest generation pipeline coordinator. Follow these steps in order:
 
 1. First, call the summarizer_tool to get a user summary based on their interests and past events
-2. Then, call the weather_tool with the user summary to get weather-appropriate activity suggestions (this agent will get weather data internally)
-3. Next, call get_current_location and store the result in state as current_location. Then call the search_tool with both the weather suggestions and the current_location from state.
+2. Next, call the weather_tool with the user summary and the provided coordinates to get weather-appropriate activity suggestions (the agent will get weather data using the coordinates).
+3. Then, call the search_tool with both the weather suggestions and the same coordinates to find real locations for the activities.
 4. Finally, call the reformatter_tool to format the final quest output
 
 Make sure to pass the output from each step as input to the next step. The final output should be a quest in the required format.
 
 Call the tools in this exact sequence:
 1. summarizer_tool
-2. weather_tool  
-3. get_current_location, then search_tool with weather_suggestions and current_location
+2. weather_tool with user_summary and coordinates
+3. search_tool with weather_suggestions and coordinates
 4. reformatter_tool
 """,
-    tools=[summarizer_tool, weather_tool, search_tool, reformatter_tool, get_current_location],
+    tools=[summarizer_tool, weather_tool, search_tool, reformatter_tool],
     output_key="final_quest"
 )
 

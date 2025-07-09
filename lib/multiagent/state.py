@@ -52,7 +52,7 @@ async def call_agent_async(query: str, runner, user_id, session_id):
     print(f"<<< Agent Response: {final_response_text}")
     return final_response_text
 
-async def generate_quest_py(user, questTitles, userId):
+async def generate_quest_py(user, questTitles, userId,coords):
     # Create the specific session where the conversation will happen
     session = await session_service.create_session(
         app_name=APP_NAME,
@@ -70,7 +70,7 @@ async def generate_quest_py(user, questTitles, userId):
         session_service=session_service
     )
     # Compose a user query string
-    query = f"I like {', '.join(user.get('interests', []))}. I have already gone to {', '.join(questTitles)}. My location is {user.get('location', '')}."
+    query = f"I like {', '.join(user.get('interests', []))}. I have already gone to {', '.join(questTitles)}. My location is {coords}."
     result = await call_agent_async(query, runner, userId, SESSION_ID)
     # Clean and parse the result if it's a string
     import re
@@ -91,14 +91,7 @@ async def generate_quest_py(user, questTitles, userId):
 # FastAPI app
 app = FastAPI()
 
-@app.post("/generate-quest")
-async def generate_quest_endpoint(request: Request):
-    data = await request.json()
-    user = data.get("user")
-    questTitles = data.get("questTitles")
-    userId = data.get("userId", USER_ID)
-    quest = await generate_quest_py(user, questTitles, userId)
-    return JSONResponse(content=quest)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run ADK quest pipeline.")

@@ -15,7 +15,7 @@ app = FastAPI()
 # Allow CORS from any origin (any port)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://quest-production-a5ff.up.railway.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
