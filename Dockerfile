@@ -12,11 +12,8 @@ RUN npm install
 # Copy the rest of the application
 COPY . .
 
-# Build the Next.js app
-RUN npm run build
-
 # Expose port 3000 (Next.js)
 EXPOSE 3000
 
-# Start Next.js in production mode
-CMD ["npm", "start"]
+# Start Next.js in production mode — build happens at runtime
+CMD ["sh", "-c", "npm run build && npm start"]
