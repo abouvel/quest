@@ -6,7 +6,7 @@
     "build": "NODE_ENV=production next build",
     "dev": "NODE_ENV=development next dev",
     "lint": "NODE_ENV=development next lint",
-    "start": "NODE_ENV=production next start"
+    "start": "NODE_ENV=production next start -p $PORT"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
