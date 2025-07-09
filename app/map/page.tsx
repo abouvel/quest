@@ -1,3 +1,5 @@
+/// <reference types="@types/google.maps" />
+
 "use client"
 
 import { useState, useEffect, useRef } from "react"
@@ -33,8 +35,7 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 // Google Maps types
 declare global {
   interface Window {
-    google: any
-    googleMapsLoaded?: boolean
+    googleMapsLoaded?: boolean;
   }
 }
 
