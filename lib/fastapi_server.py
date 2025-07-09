@@ -46,4 +46,4 @@ async def get_admin():
         # Get a sample quest (first one)
         return supabase
     except Exception as e:
-        return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500) r
+        return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500) 
