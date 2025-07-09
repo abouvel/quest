@@ -52,6 +52,10 @@ async def call_agent_async(query: str, runner, user_id, session_id):
     return final_response_text
 
 async def generate_quest_py(user, questTitles, userId):
+    print("[DEBUG] generate_quest_py called with:")
+    print("  user:", user)
+    print("  questTitles:", questTitles)
+    print("  userId:", userId)
     # Create the specific session where the conversation will happen
     session = await session_service.create_session(
         app_name=APP_NAME,
