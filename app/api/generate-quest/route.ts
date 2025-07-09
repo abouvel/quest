@@ -13,18 +13,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate quest using your existing service
-    let quest;
+    let questResponse;
     try {
-      quest = await UserService.generateUserQuest(userId)
-      console.log('[API] Quest generated for userId:', userId, quest);
+      questResponse = await UserService.generateUserQuest(userId)
+      console.log('[API] Quest generated for userId:', userId, questResponse);
     } catch (err) {
       console.error('[API] Error in generateUserQuest:', err);
       return NextResponse.json({ error: 'Failed to generate quest', details: (err as any)?.message || err }, { status: 500 })
     }
 
-    if (!quest) {
-      console.error('[API] No quest returned for userId:', userId);
-      return NextResponse.json({ error: 'Failed to generate quest' }, { status: 500 })
+    // Extract the quest object from final_quest, quest, or direct
+    const quest = questResponse.final_quest;
+    console.log('[API] About to save quest:', quest);
+
+    if (!quest || !quest.description) {
+      console.error('[API] Invalid quest object, missing description:', quest);
+      return NextResponse.json({ error: 'Invalid quest object from backend', details: quest }, { status: 500 })
     }
 
     // Save the quest to database
