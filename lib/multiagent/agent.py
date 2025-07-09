@@ -185,11 +185,13 @@ You are a response formatter. Given the search results, reformat and output ONLY
 
 Use the first result in the search_results list as the quest. IMPORTANT: The quest you select must be available to do TODAY (the day this request is submitted). Do NOT select events that are only available on future dates.
 
+IMPORTANT: In the description field, always start with the location name followed by a colon, then the description. For example: "Philadelphia Museum of Art: See the 'American Gothic' painting and enjoy world-class exhibits."
+
 Example:
 {
   "final_quest": {
     "title": "Visit a Local Art Museum",
-    "description": "See the 'American Gothic' painting and enjoy world-class exhibits.",
+    "description": "Philadelphia Museum of Art: See the 'American Gothic' painting and enjoy world-class exhibits.",
     "locationName": "Philadelphia Museum of Art",
     "address": "2600 Benjamin Franklin Pkwy, Philadelphia, PA 19130"
   }

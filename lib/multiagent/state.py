@@ -39,7 +39,8 @@ async def call_agent_async(query: str, runner, user_id, session_id):
     async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=content):
         # Print all events for debugging
         if event.content and event.content.parts:
-            print(f"   Content: {event.content.parts[0].text}")
+            print(f"   Content: {event.content}")
+            final_response_text = event.content.parts[0].text
         # Check for final response
         if hasattr(event, 'is_final_response') and event.is_final_response():
             if event.content and event.content.parts:

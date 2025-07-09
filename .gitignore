@@ -25,3 +25,59 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Backend files to ignore (keeping only /lib and essential files)
+# Test files
+test-*.js
+debug-*.js
+add-*.js
+setup-storage.js
+ai.js
+
+# Documentation and notes
+presentation-notes.txt
+API_Documentation.txt
+googlemaps.txt
+sqlFormat.txt
+
+# SQL files
+*.sql
+
+# Log files
+*.log
+
+# Zip files
+*.zip
+
+# Temporary files
+e
+
+# Cursor reference files
+cursorRef/
+
+# Frontend files to ignore
+/app/
+/components/
+/hooks/
+/public/
+/styles/
+/types/
+next.config.mjs
+postcss.config.mjs
+tailwind.config.ts
+tsconfig.json
+components.json
+vercel.json
+package.json
+package-lock.json
+pnpm-lock.yaml
+next-env.d.ts
+
+# Keep essential backend files:
+# - /lib/ (entire folder)
+# - requirements.txt
+# - Dockerfile
+# - docker-compose.yaml
+# - .dockerignore
+# - start.sh
+# - .venv/ (Python virtual environment)
