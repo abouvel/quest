@@ -234,18 +234,16 @@ export default function QuestPage() {
 
       const data = await response.json()
       console.log('Generated quest data:', data)
-      
+      // Extract quest object from final_quest, quest, or direct
+      const questObj = data.final_quest || data.quest || data;
       // Wait for database to be updated and retry fetching the quest
       let newQuest = null
       let retryCount = 0
       const maxRetries = 5
-      
       while (!newQuest && retryCount < maxRetries) {
         console.log(`Attempting to fetch newly generated quest (attempt ${retryCount + 1}/${maxRetries})`)
-        
         // Wait a bit for database to update
         await new Promise(resolve => setTimeout(resolve, 1000 + (retryCount * 500)))
-        
         const { data: questData, error: fetchNewQuestError } = await supabase
           .from('quests')
           .select('*')
@@ -254,43 +252,37 @@ export default function QuestPage() {
           .order('assigned_at', { ascending: false })
           .limit(1)
           .single()
-        
         if (!fetchNewQuestError && questData) {
           newQuest = questData
           console.log('Successfully found newly generated quest:', newQuest)
           break
         }
-        
         retryCount++
         console.log(`Quest not found yet, retrying... (${retryCount}/${maxRetries})`)
       }
-      
       if (!newQuest) {
         console.error('Failed to fetch newly generated quest after retries')
         // Use fallback quest from API response
         const fallbackQuest: DailyQuest = {
           id: "fallback-" + Date.now(),
-          title: data.quest.title,
-          description: data.quest.description,
+          title: questObj.title,
+          description: questObj.description,
           location: userLocation,
           category: "Adventure",
           difficulty: "Medium",
           estimatedTime: "1-2 hours",
           points: 150,
           completed: false,
-          debug: data.quest.debug,
-          address: data.quest.address,
+          debug: questObj.debug,
+          address: questObj.address,
         }
         setTodayQuest(fallbackQuest)
         return
       }
-      
       // Set this as the current quest
       await questUtils.setCurrentQuest(user.id, newQuest.id)
-      
       // Add a small delay to prevent immediate regeneration
       await new Promise(resolve => setTimeout(resolve, 2000))
-      
       // Use the database quest
       const quest: DailyQuest = {
         id: newQuest.id,
@@ -302,10 +294,9 @@ export default function QuestPage() {
         estimatedTime: "1-2 hours",
         points: 150,
         completed: false,
-        debug: data.quest.debug,
+        debug: questObj.debug,
         address: newQuest.address,
       }
-
       console.log('Using newly generated quest:', quest)
       setTodayQuest(quest)
       
