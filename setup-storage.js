@@ -5,7 +5,7 @@ const { createClient } = require('@supabase/supabase-js')
 
 // You'll need to get these from your Supabase project settings
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
