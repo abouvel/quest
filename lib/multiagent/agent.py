@@ -65,6 +65,15 @@ search_agent = Agent(
     model="gemini-2.0-flash",
     name="search_agent",
     instruction="""
+⚠️ Instruction:
+When passing location data, always format it as a JSON object with explicit keys:
+{
+  \"latitude\": 40.0326992,
+  \"longitude\": -75.4852164
+}
+Do not format coordinates as a plain string like \"40.0326992, -75.4852164\".
+This ensures downstream agents like weather_time_agent can parse the location correctly.
+
 You will receive:
 - weather_suggestions: activity suggestions from the weather agent
 - current_location: the user's current location (latitude, longitude, city/state)
@@ -111,6 +120,15 @@ weather_agent = Agent(
         "Agent that suggests activities based on the user's summarized interests and the current weather. It will recommend things to do that match the weather conditions and the user's preferences."
     ),
     instruction="""
+⚠️ Instruction:
+When passing location data, always format it as a JSON object with explicit keys:
+{
+  \"latitude\": 40.0326992,
+  \"longitude\": -75.4852164
+}
+Do not format coordinates as a plain string like \"40.0326992, -75.4852164\".
+This ensures downstream agents like weather_time_agent can parse the location correctly.
+
 Given a summary of the user's interests and preferences {user_summary} and coordinates (passed in as a JSON object), output ONLY valid JSON in this exact format:
 {
   "weather_suggestions": [
@@ -218,6 +236,15 @@ code_pipeline_agent = Agent(
     description="This function is designed to find the perfect place to do a daily quest. Make sure you go through the whole pipeline and print out {final_quest}",
     name="code_pipeline_agent",
     instruction="""
+⚠️ Instruction:
+When passing location data, always format it as a JSON object with explicit keys:
+{
+  \"latitude\": 40.0326992,
+  \"longitude\": -75.4852164
+}
+Do not format coordinates as a plain string like \"40.0326992, -75.4852164\".
+This ensures downstream agents like weather_time_agent can parse the location correctly.
+
 You are a quest generation pipeline coordinator. Follow these steps in order:
 
 1. First, call the summarizer_tool to get a user summary based on their interests and past events
