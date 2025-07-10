@@ -75,7 +75,9 @@ export default function QuestPage() {
   useEffect(() => {
     if (!authLoading && isAuthenticated && user && !hasGeneratedThisSession.current) {
       fetchUserLocation()
+      setUserCoordinates()
       fetchQuest()
+      
     }
     setupCountdown()
   }, [authLoading, isAuthenticated, user])
@@ -558,6 +560,39 @@ export default function QuestPage() {
     setPhotoTaken(false)
     setPhotoData(null)
     startCamera()
+  }
+
+  const setUserCoordinates = async () => {
+    if (!user) return
+    
+    if ("geolocation" in navigator) {
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+        
+        const { latitude, longitude } = position.coords;
+        console.log("Setting user coordinates:", latitude, longitude);
+        
+        const { error } = await supabase
+          .from('users')
+          .update({ 
+            latitude: latitude, 
+            longitude: longitude 
+          })
+          .eq('id', user.id);
+        
+        if (error) {
+          console.error('Failed to update coordinates:', error);
+        } else {
+          console.log('Successfully updated user coordinates');
+        }
+      } catch (error) {
+        console.error("Error getting location:", error);
+      }
+    } else {
+      console.error("Geolocation not supported");
+    }
   }
 
   const dataURLtoFile = (dataURL: string, filename: string): File => {
