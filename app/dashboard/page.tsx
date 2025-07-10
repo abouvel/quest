@@ -149,7 +149,7 @@ export default function Dashboard() {
                 username: quest.isOwn ? username : username,
                 questName: quest.title || `Quest: ${quest.description.substring(0, 50)}${quest.description.length > 50 ? '...' : ''}`,
                 description: quest.description,
-                location: quest.lat && quest.lng ? `📍 ${quest.lat.toFixed(4)}, ${quest.lng.toFixed(4)}` : 'Location not specified',
+                location: quest.address ? `📍 ${quest.address}` : 'Location not specified',
                 completedAt: new Date(quest.completed_at).toLocaleString(),
                 image: imageUrl,
                 image_path: quest.image_path,

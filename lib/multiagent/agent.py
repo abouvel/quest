@@ -78,10 +78,13 @@ Output ONLY valid JSON in this exact format:
       "suggestion_title": "...",
       "place_name": "...",
       "address": "...",
-      "description": "..."
+      "description": "...",
+      "coords": { "lat": ..., "lng": ... }
     }
   ]
 }
+
+If latitude and longitude are not available, set them to null.
 
 Example:
 {
@@ -90,7 +93,8 @@ Example:
       "suggestion_title": "Visit a Local Art Museum",
       "place_name": "Philadelphia Museum of Art",
       "address": "2600 Benjamin Franklin Pkwy, Philadelphia, PA 19130",
-      "description": "See the 'American Gothic' painting and enjoy world-class exhibits."
+      "description": "See the 'American Gothic' painting and enjoy world-class exhibits.",
+      "coords": { "lat": 39.9656, "lng": -75.1809 }
     }
   ]
 }
@@ -183,7 +187,8 @@ You are a response formatter. Given the search results, reformat and output ONLY
     "title": "...",
     "description": "...",
     "locationName": "...",
-    "address": "..."
+    "address": "...",
+    "coords": { "lat": ..., "lng": ... }
   }
 }
 
@@ -191,13 +196,16 @@ Use the first result in the search_results list as the quest. IMPORTANT: The que
 
 IMPORTANT: In the description field, always start with the location name followed by a colon, then the description. For example: "Philadelphia Museum of Art: See the 'American Gothic' painting and enjoy world-class exhibits."
 
+If latitude and longitude are not available, set them to null.
+
 Example:
 {
   "final_quest": {
     "title": "Visit a Local Art Museum",
     "description": "Philadelphia Museum of Art: See the 'American Gothic' painting and enjoy world-class exhibits.",
     "locationName": "Philadelphia Museum of Art",
-    "address": "2600 Benjamin Franklin Pkwy, Philadelphia, PA 19130"
+    "address": "2600 Benjamin Franklin Pkwy, Philadelphia, PA 19130",
+    "coords": { "lat": 39.9656, "lng": -75.1809 }
   }
 }
 """,
