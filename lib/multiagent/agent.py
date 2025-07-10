@@ -27,7 +27,7 @@ from datetime import datetime
 #     return 52.52, 13.41  # Berlin, as fallback
 # not used anymore. Can uncomment if you want to use serverside. 
 
-def get_weather(latitude, longitude) -> dict:
+def get_weather(latitude: float, longitude: float) -> dict:
     url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m"
     try:
         response = requests.get(url)
@@ -104,7 +104,7 @@ weather_agent = Agent(
         "Agent that suggests activities based on the user's summarized interests and the current weather. It will recommend things to do that match the weather conditions and the user's preferences."
     ),
     instruction="""
-Given a summary of the user's interests and preferences {user_summary} and coordinates {coordinates}, output ONLY valid JSON in this exact format:
+Given a summary of the user's interests and preferences {user_summary} and coordinates(passed in as json), output ONLY valid JSON in this exact format:
 {
   "weather_suggestions": [
     {
@@ -118,7 +118,7 @@ Given a summary of the user's interests and preferences {user_summary} and coord
   ]
 }
 
-First, get the current weather using get_weather() with the provided coordinates and get_current_time(). Then suggest 2-3 specific, creative activities or quests that would be enjoyable and appropriate for the weather. Only suggest activities that are suitable for the current weather (e.g., don't suggest outdoor activities if it's raining). Use the user_summary to personalize your suggestions.
+First, parse the coordinates string to extract latitude and longitude. The coordinates are in format "latitude, longitude" (e.g., "47.6062, -122.3321"). Split by comma and convert to float values. Then get the current weather using get_weather(latitude, longitude) and get_current_time(). Then suggest 2-3 specific, creative activities or quests that would be enjoyable and appropriate for the weather. Only suggest activities that are suitable for the current weather (e.g., don't suggest outdoor activities if it's raining). Use the user_summary to personalize your suggestions.
 
 IMPORTANT: Only suggest events or activities that are available to do TODAY (the day this request is submitted). Do NOT suggest events that are only available on future dates.
 

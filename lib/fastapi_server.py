@@ -36,7 +36,8 @@ async def create_quest(request: Request):
     user = body.get("user")
     questTitles = body.get("questTitles")
     userId = body.get("userId")
-    result = await generate_quest_py(user, questTitles, userId)
+    coords = body.get("coords") 
+    result = await generate_quest_py(user, questTitles, userId, coords)
     return JSONResponse(content=result)
 
 @app.get("/admin")
