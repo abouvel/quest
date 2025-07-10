@@ -5,11 +5,23 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const userId = body.userId;
-    console.log('[API] /api/generate-quest called. Received userId:', userId);
+    const coords = body.coords; // Get coordinates from request body
+    console.log('[API] /api/generate-quest called. Received userId:', userId, 'coords:', coords);
 
     if (!userId) {
       console.error('[API] No userId provided in request body:', body);
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+    }
+
+    // Update user coordinates if provided
+    if (coords && coords.latitude && coords.longitude) {
+      try {
+        await UserService.updateUserCoordinates(userId, coords.latitude, coords.longitude);
+        console.log('[API] Updated user coordinates for userId:', userId, coords);
+      } catch (err) {
+        console.error('[API] Error updating user coordinates:', err);
+        // Continue without coordinates if update fails
+      }
     }
 
     // Generate quest using your existing service
