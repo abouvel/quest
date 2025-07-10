@@ -27,7 +27,10 @@ from datetime import datetime
 #     return 52.52, 13.41  # Berlin, as fallback
 # not used anymore. Can uncomment if you want to use serverside. 
 
-def get_weather(latitude: float, longitude: float) -> dict:
+def get_weather(params: dict):
+    latitude = float(params.get("latitude"))
+    longitude = float(params.get("longitude"))
+    ...
     url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m"
     try:
         response = requests.get(url)
@@ -47,7 +50,7 @@ def get_weather(latitude: float, longitude: float) -> dict:
         }
 
 
-def get_current_time() -> dict:
+def get_current_time():
     """Returns the current local time on the machine running the code.
 
     Returns:
@@ -66,7 +69,7 @@ You will receive:
 - weather_suggestions: activity suggestions from the weather agent
 - current_location: the user's current location (latitude, longitude, city/state)
 
-For each weather suggestion, use google_search to find a specific, real, and popular location or event that matches the activity and is within driving distance (within 50 miles) of the current_location. Always include the user's city/state in your search queries to ensure results are nearby. Do NOT call any tool to get the location; use the provided current_location.
+For each weather suggestion, use google_search to find a specific, real, and popular location or event that matches the activity and is geographically close to the provided latitude and longitude (within 50 miles). Always use the latitude and longitude to ensure the result is near the user, and do NOT confuse with other places that have similar names in different locations. Always include the user's city/state in your search queries to ensure results are nearby. Do NOT call any tool to get the location; use the provided current_location.
 
 Output ONLY valid JSON in this exact format:
 {
@@ -104,7 +107,7 @@ weather_agent = Agent(
         "Agent that suggests activities based on the user's summarized interests and the current weather. It will recommend things to do that match the weather conditions and the user's preferences."
     ),
     instruction="""
-Given a summary of the user's interests and preferences {user_summary} and coordinates(passed in as json), output ONLY valid JSON in this exact format:
+Given a summary of the user's interests and preferences {user_summary} and coordinates (passed in as a JSON object), output ONLY valid JSON in this exact format:
 {
   "weather_suggestions": [
     {
@@ -118,7 +121,9 @@ Given a summary of the user's interests and preferences {user_summary} and coord
   ]
 }
 
-First, parse the coordinates string to extract latitude and longitude. The coordinates are in format "latitude, longitude" (e.g., "47.6062, -122.3321"). Split by comma and convert to float values. Then get the current weather using get_weather(latitude, longitude) and get_current_time(). Then suggest 2-3 specific, creative activities or quests that would be enjoyable and appropriate for the weather. Only suggest activities that are suitable for the current weather (e.g., don't suggest outdoor activities if it's raining). Use the user_summary to personalize your suggestions.
+IMPORTANT: When calling the weather_tool, you MUST pass a JSON object with keys 'latitude' and 'longitude', e.g. { "latitude": 47.6062, "longitude": -122.3321 }.
+
+First, use the coordinates JSON to extract latitude and longitude. Then get the current weather using get_weather({"latitude": latitude, "longitude": longitude}) and get_current_time(). Then suggest 2-3 specific, creative activities or quests that would be enjoyable and appropriate for the weather. Only suggest activities that are suitable for the current weather (e.g., don't suggest outdoor activities if it's raining). Use the user_summary to personalize your suggestions.
 
 IMPORTANT: Only suggest events or activities that are available to do TODAY (the day this request is submitted). Do NOT suggest events that are only available on future dates.
 
