@@ -6,7 +6,7 @@
 # next.js
 /.next/
 /out/
-
+docker.md
 # production
 /build
 
