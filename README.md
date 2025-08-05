@@ -20,6 +20,99 @@ The backend is built with FastAPI and leverages Google's Agent Development Kit (
 - **Maps Integration** (`lib/multiagent/maps_api.py`) - Quest location validation
 - **Database Integration** - Supabase client for data persistence
 
+## Agent Workflow Architecture
+
+The backend leverages Google's Agent Development Kit (ADK) with a sophisticated multiagent pipeline for personalized quest generation:
+
+### Agent Pipeline (`lib/multiagent/`)
+
+**Core Components:**
+- **State Management** (`state.py`) - Session management and user context storage
+- **Agent Definitions** (`agent.py`) - Four specialized agents working in sequence
+- **Maps Validation** (`maps_api.py`) - Google Maps API integration for location verification
+
+### Agent Workflow Sequence
+
+The quest generation follows a 4-step agent pipeline:
+
+#### 1. **Summarizer Agent** 
+- **Input**: User interests + completed quest history
+- **Function**: Creates personalized user profile avoiding duplicate activities
+- **Output**: `user_summary` - tailored preference analysis
+
+#### 2. **Weather-Time Agent**
+- **Input**: User summary + coordinates (lat/lng JSON)
+- **Tools**: Weather API (`get_weather`) + time utilities (`get_current_time`)
+- **Function**: Suggests 2-3 weather-appropriate activities for TODAY only
+- **Output**: `weather_suggestions` array with titles and descriptions
+
+#### 3. **Search Agent**
+- **Input**: Weather suggestions + user location + coordinates
+- **Tools**: Google Search API
+- **Function**: Finds real, popular locations within 50 miles matching suggested activities
+- **Output**: `search_results` with place names, addresses, and coordinates
+
+#### 4. **Reformatter Agent**
+- **Input**: Search results from previous agent
+- **Function**: Formats final quest with standardized structure
+- **Output**: `final_quest` object with title, description, location details
+
+### Pipeline Coordinator
+
+**Code Pipeline Agent** (`code_pipeline_agent`) orchestrates the entire workflow:
+```python
+# Execution sequence:
+1. summarizer_tool(interests, past_events) → user_summary
+2. weather_tool(user_summary, coordinates) → weather_suggestions  
+3. search_tool(weather_suggestions, coordinates) → search_results
+4. reformatter_tool(search_results) → final_quest
+```
+
+### Location Data Flow
+
+**Critical**: Coordinates are passed as JSON objects throughout the pipeline:
+```json
+{
+  "latitude": 40.0326992,
+  "longitude": -75.4852164
+}
+```
+
+### Quest Validation
+
+**Maps API Integration** (`maps_api.py`):
+- Validates generated quest locations using Google Maps API
+- Performs multi-tier location search (exact name → partial name → fallback)
+- Enriches quest data with real place details, ratings, and verified coordinates
+- Returns validation status and location metadata
+
+### Session Management
+
+**ADK Session Handling** (`state.py`):
+- In-memory session service for user context
+- Stores user preferences, coordinates, and completion history
+- Maintains conversation state across agent interactions
+- Session-scoped data persistence during quest generation
+
+### Output Format
+
+Final quest structure:
+```json
+{
+  "final_quest": {
+    "title": "Visit Local Art Museum",
+    "description": "Philadelphia Museum of Art: See world-class exhibits...",
+    "locationName": "Philadelphia Museum of Art", 
+    "address": "2600 Benjamin Franklin Pkwy, Philadelphia, PA 19130",
+    "coords": { "lat": 39.9656, "lng": -75.1809 },
+    "validated": true,
+    "location": {
+      "name": "...", "rating": 4.5, "placeId": "..."
+    }
+  }
+}
+```
+
 ### API Endpoints
 
 #### POST /quests
