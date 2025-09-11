@@ -122,5 +122,3 @@ Docs available at:
 
 ---
 
-## License
-MIT License.
